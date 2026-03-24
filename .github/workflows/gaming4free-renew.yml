@@ -23,7 +23,7 @@ jobs:
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/gaming4free_renew
+          repository: ${{ github.repository_owner }}/gaming4free_auto
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: scripts
 
