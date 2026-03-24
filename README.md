@@ -1,2 +1,1 @@
-# scripts_game
-自用版
+### Cleanup Log
