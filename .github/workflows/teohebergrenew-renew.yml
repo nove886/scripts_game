@@ -1,0 +1,96 @@
+name: Auto Renew Teoheberg
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *' # 每天 UTC 18 点运行
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15   # ⬅️ 限制 15 分钟
+
+    steps:
+      # =========================
+      # 📥 Checkout 主仓库
+      # =========================
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      # =========================
+      # 🟡 ⭐ Checkout 私有仓库
+      # =========================
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/teoheberg_renew
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: scripts  # 私有 repo 会被拉到 scripts 文件夹
+
+      # =========================
+      # 🟢 Node.js
+      # =========================
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # =========================
+      # 🐍 Python（语音识别）
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # =========================
+      # 📦 安装依赖
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install playwright
+
+          sudo apt-get update
+          sudo apt-get install -y xvfb ffmpeg curl p7zip-full pulseaudio
+
+          pip install SpeechRecognition pydub
+
+      # =========================
+      # 🌐 浏览器
+      - name: Install Chromium
+        run: |
+          npx playwright install chromium
+
+      # =========================
+      # 🔊 虚拟音频环境（reCAPTCHA 音频必需）
+      - name: Setup audio
+        run: |
+          pulseaudio --start || true
+          pactl load-module module-null-sink sink_name=virtual_speaker || true
+          pactl set-default-sink virtual_speaker || true
+
+      # =========================
+      # 🌐 WARP（可选）
+      - name: WARP
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      # =========================
+      # 🚀 运行主脚本
+      - name: Run script
+        env:
+          TEOHEBERG_REMEMBER_WEB_COOKIE: ${{ secrets.TEOHEBERG_REMEMBER_WEB_COOKIE }}
+        run: |
+          # main.js 在私有仓库 scripts 根目录
+          xvfb-run -a node scripts/main.js
+
+      # =========================
+      # 📸 上传调试文件
+      - name: Upload debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug
+          path: scripts/screenshots
+          retention-days: 3
