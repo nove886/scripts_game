@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "*/30 * * * *"   # 🕕 每 30 分钟执行一次
+    - cron: '0 18 * * *' # 每天 UTC 18 点运行
 
 jobs:
   run:
