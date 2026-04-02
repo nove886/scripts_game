@@ -22,12 +22,15 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: 安装 jq
+        run: sudo apt-get install -y jq
+
       - name: 🛡️ 启动 Hysteria2 代理转发
         if: ${{ env.HYSTERIA2_PROXY != '' }}
         env:
           HYSTERIA2_PROXY: ${{ secrets.HYSTERIA2_PROXY }}
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/HyNetwork/hysteria/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
+          VERSION=$(curl -s https://api.github.com/repos/HyNetwork/hysteria/releases/latest | jq -r .tag_name | tr -d 'v')
           echo "📦 Hysteria2 版本: $VERSION"
           wget -q "https://github.com/HyNetwork/hysteria/releases/download/v${VERSION}/hysteria-linux-amd64-${VERSION}.tar.gz"
           tar -xzf "hysteria-linux-amd64-${VERSION}.tar.gz"
