@@ -27,15 +27,35 @@ jobs:
         env:
           GOST_PROXY: ${{ secrets.GOST_PROXY }}
         run: |
+          # 获取 GOST 版本号
+          echo "获取 GOST 版本信息..."
+          curl -s https://api.github.com/repos/ginuerzh/gost/releases/latest
+          
           VERSION=$(curl -s https://api.github.com/repos/ginuerzh/gost/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
+          
+          # 打印获取到的 GOST 版本
           echo "📦 GOST 版本: $VERSION"
-          wget -q "https://github.com/ginuerzh/gost/releases/download/v${VERSION}/gost_${VERSION}_linux_amd64.tar.gz"
+          
+          # 构建下载 URL 并打印
+          DOWNLOAD_URL="https://github.com/ginuerzh/gost/releases/download/v${VERSION}/gost_${VERSION}_linux_amd64.tar.gz"
+          echo "下载链接: $DOWNLOAD_URL"
+          
+          # 下载并解压 GOST
+          wget -q "$DOWNLOAD_URL"
           tar -xzf "gost_${VERSION}_linux_amd64.tar.gz"
           chmod +x gost
+          
+          # 启动 GOST 代理
           nohup ./gost -L http://:8080 -F "$GOST_PROXY" > gost.log 2>&1 &
+          
+          # 等待 GOST 启动
           sleep 3
+          
+          # 获取当前 IP 并进行简单的掩码处理
           IP=$(curl -s -x http://127.0.0.1:8080 https://api.ipify.org)
           IP_MASKED=$(echo "$IP" | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1xx/')
+          
+          # 打印代理 IP 信息
           echo "✅ GOST 已启动，出口IP确认：$IP_MASKED"
 
       - name: 🛠️ 安装系统依赖
