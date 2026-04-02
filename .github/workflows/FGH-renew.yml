@@ -30,12 +30,12 @@ jobs:
         env:
           HYSTERIA2_PROXY: ${{ secrets.HYSTERIA2_PROXY }}
         run: |
-          # 调试：打印 GitHub API 返回的内容
+          # 调试：打印 GitHub API 返回的内容，添加 -L 使 curl 跟随重定向
           echo "调试：GitHub API 返回内容："
-          curl -s https://api.github.com/repos/HyNetwork/hysteria/releases/latest
+          curl -sL https://api.github.com/repos/HyNetwork/hysteria/releases/latest
 
           # 获取版本号并移除前缀 'v'
-          VERSION=$(curl -s https://api.github.com/repos/HyNetwork/hysteria/releases/latest | jq -r .tag_name | tr -d 'v')
+          VERSION=$(curl -sL https://api.github.com/repos/HyNetwork/hysteria/releases/latest | jq -r .tag_name | tr -d 'v')
 
           # 检查是否成功获取版本
           if [ -z "$VERSION" ]; then
