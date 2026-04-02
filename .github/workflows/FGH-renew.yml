@@ -23,26 +23,16 @@ jobs:
           python-version: '3.x'
 
       - name: 🛡️ 启动 Hysteria2 代理转发
-        if: ${{ env.HY2_PROXY != '' }}
+        if: ${{ env.HYSTERIA2_PROXY != '' }}
         env:
-          HY2_PROXY: ${{ secrets.HY2_PROXY }}
+          HYSTERIA2_PROXY: ${{ secrets.HYSTERIA2_PROXY }}
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/apernet/hysteria/releases/latest \
-            | grep '"tag_name"' | cut -d'"' -f4)
+          VERSION=$(curl -s https://api.github.com/repos/HyNetwork/hysteria/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
           echo "📦 Hysteria2 版本: $VERSION"
-          wget -q "https://github.com/apernet/hysteria/releases/download/${VERSION}/hysteria-linux-amd64" \
-            -O hysteria
+          wget -q "https://github.com/HyNetwork/hysteria/releases/download/v${VERSION}/hysteria-linux-amd64-${VERSION}.tar.gz"
+          tar -xzf "hysteria-linux-amd64-${VERSION}.tar.gz"
           chmod +x hysteria
-          # HY2_PROXY 格式: hysteria2://密码@服务器地址:端口
-          HY2_SERVER=$(echo "$HY2_PROXY" | sed 's|hysteria2://[^@]*@||')
-          HY2_PASS=$(echo "$HY2_PROXY" | sed 's|hysteria2://||' | cut -d@ -f1)
-          cat > hy2-client.yaml << EOF
-          server: "$HY2_SERVER"
-          auth: "$HY2_PASS"
-          http:
-            listen: 127.0.0.1:8080
-          EOF
-          nohup ./hysteria client -c hy2-client.yaml > hy2.log 2>&1 &
+          nohup ./hysteria server -t $HYSTERIA2_PROXY -l :8080 > hysteria.log 2>&1 &
           sleep 3
           IP=$(curl -s -x http://127.0.0.1:8080 https://api.ipify.org)
           IP_MASKED=$(echo "$IP" | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1xx/')
@@ -67,6 +57,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
           FGH_ACCOUNT: ${{ secrets.FGH_ACCOUNT }}
+          HYSTERIA2_PROXY: ${{ secrets.HYSTERIA2_PROXY }}
           TG_BOT: ${{ secrets.TG_BOT }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python renew.py
