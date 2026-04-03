@@ -12,14 +12,14 @@ jobs:
       - name: 📥 检出当前仓库
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # 使用 PRIVATE_REPO_TOKEN 访问仓库
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
 
       # 步骤2：检出 freegamehost-renew 私有仓库
       - name: 📥 检出 freegamehost-renew 仓库
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/freegamehost-renew  # 动态获取仓库所有者
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # 使用 PRIVATE_REPO_TOKEN 访问私有仓库
+          repository: ${{ github.repository_owner }}/freegamehost-renew
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
 
       # 步骤3：设置 Python 环境
       - name: 🐍 设置 Python
@@ -27,23 +27,60 @@ jobs:
         with:
           python-version: '3.x'
 
-      # 步骤4：启动 GOST 代理
-      - name: 🛡️ 启动 GOST 代理转发
+      # 步骤4：启动 Hysteria2 代理
+      # HY2_PROXY 格式：hysteria2://password@host:port?sni=xxx&alpn=h3&insecure=1#name
+      - name: 🛡️ 启动 Hysteria2 代理转发
         env:
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
-        if: ${{ env.GOST_PROXY != '' }}
+          HY2_PROXY: ${{ secrets.HY2_PROXY }}
+        if: ${{ env.HY2_PROXY != '' }}
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/ginuerzh/gost/releases/latest \
-            | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
-          echo "📦 GOST 版本: $VERSION"
-          wget -q "https://github.com/ginuerzh/gost/releases/download/v${VERSION}/gost_${VERSION}_linux_amd64.tar.gz"
-          tar -xzf "gost_${VERSION}_linux_amd64.tar.gz"
-          chmod +x gost
-          nohup ./gost -L http://:8080 -F "$GOST_PROXY" > gost.log 2>&1 &
-          sleep 3
+          # ── 解析 URI，导出为独立变量 ───────────────────────────
+          URI="${HY2_PROXY%%\#*}"                          # 去掉 #fragment
+          URI="${URI#hysteria2://}"                        # 去掉 scheme
+          export HY2_PASS="${URI%%@*}"                     # @ 之前 = 密码
+          AFTER_AT="${URI##*@}"                            # @ 之后
+          export HY2_HOST="${AFTER_AT%%:*}"                # : 之前 = host
+          TMP="${AFTER_AT#*:}"
+          export HY2_PORT="${TMP%%\?*}"                    # ? 之前 = port
+          QUERY="${AFTER_AT#*\?}"
+          export HY2_SNI="$(echo "$QUERY"      | grep -oP '(?<=sni=)[^&]+'      || true)"
+          export HY2_ALPN="$(echo "$QUERY"     | grep -oP '(?<=alpn=)[^&]+'     || true)"
+          export HY2_INSECURE="$(echo "$QUERY" | grep -oP '(?<=insecure=)[^&]+' || true)"
+
+          echo "📡 服务器：${HY2_HOST}:${HY2_PORT}"
+          echo "🔐 SNI：${HY2_SNI:-（无）}  ALPN：${HY2_ALPN:-（无）}  Insecure：${HY2_INSECURE:-0}"
+
+          # ── 下载 Hysteria2 ─────────────────────────────────────
+          VERSION=$(curl -s https://api.github.com/repos/apernet/hysteria/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          echo "📦 Hysteria2 版本: $VERSION"
+          wget -q "https://github.com/apernet/hysteria/releases/download/${VERSION}/hysteria-linux-amd64" \
+            -O hysteria2
+          chmod +x hysteria2
+
+          # ── 用变量生成配置文件 ─────────────────────────────────
+          cat > hy2.yaml << EOF
+          server: ${HY2_HOST}:${HY2_PORT}
+          auth: ${HY2_PASS}
+          tls:
+            sni: ${HY2_SNI}
+            insecure: $([ "${HY2_INSECURE}" = "1" ] && echo true || echo false)
+            alpn:
+              - ${HY2_ALPN}
+          http:
+            listen: 127.0.0.1:8080
+          EOF
+
+          echo "📄 生成的配置："
+          cat hy2.yaml
+
+          # ── 启动并验证 ─────────────────────────────────────────
+          nohup ./hysteria2 client -c hy2.yaml > hy2.log 2>&1 &
+          sleep 5
+
           IP=$(curl -s -x http://127.0.0.1:8080 https://api.ipify.org)
           IP_MASKED=$(echo "$IP" | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1xx/')
-          echo "✅ GOST 已启动，出口IP确认：$IP_MASKED"
+          echo "✅ Hysteria2 已启动，出口IP确认：$IP_MASKED"
 
       # 步骤5：安装系统依赖
       - name: 🛠️ 安装系统依赖
@@ -67,7 +104,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
           FGH_ACCOUNT: ${{ secrets.FGH_ACCOUNT }}
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
+          HY2_PROXY: ${{ secrets.HY2_PROXY }}
           TG_BOT: ${{ secrets.TG_BOT }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python renew.py
