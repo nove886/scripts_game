@@ -2,19 +2,30 @@ name: FGH-Renew
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *'  # 每6小时运行一次
+
 jobs:
   run_fgh_renew:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 检出仓库
+      # 步骤1：检出当前仓库代码
+      - name: 📥 检出当前仓库
         uses: actions/checkout@v4
 
+      # 步骤2：检出 freegamehost-renew 私有仓库
+      - name: 📥 检出 freegamehost-renew 仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/freegamehost-renew  # 使用当前仓库所有者 + 私有仓库名
+          token: ${{ secrets.GH_TOKEN }}  # 使用 GitHub Secrets 中的 GH_TOKEN 访问私有仓库
+
+      # 步骤3：设置 Python 环境
       - name: 🐍 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
+      # 步骤4：启动 GOST 代理
       - name: 🛡️ 启动 GOST 代理转发
         env:
           GOST_PROXY: ${{ secrets.GOST_PROXY }}
@@ -32,6 +43,7 @@ jobs:
           IP_MASKED=$(echo "$IP" | sed 's/\([0-9]*\.[0-9]*\.[0-9]*\.\)[0-9]*/\1xx/')
           echo "✅ GOST 已启动，出口IP确认：$IP_MASKED"
 
+      # 步骤5：安装系统依赖
       - name: 🛠️ 安装系统依赖
         run: |
           sudo apt-get update
@@ -42,11 +54,13 @@ jobs:
             xdotool \
             scrot
 
+      # 步骤6：安装 Python 依赖
       - name: 🐍 安装 Python 依赖
         run: |
           pip install seleniumbase requests
           seleniumbase install chromedriver
 
+      # 步骤7：运行 Python 脚本
       - name: 🚀 运行脚本
         env:
           PYTHONIOENCODING: utf-8
@@ -56,6 +70,7 @@ jobs:
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python renew.py
 
+      # 步骤8：上传截图
       - name: 📸 上传截图
         if: always()
         uses: actions/upload-artifact@v4
