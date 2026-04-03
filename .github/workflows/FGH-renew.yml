@@ -11,13 +11,15 @@ jobs:
       # 步骤1：检出当前仓库代码
       - name: 📥 检出当前仓库
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # 使用 PRIVATE_REPO_TOKEN 访问仓库
 
       # 步骤2：检出 freegamehost-renew 私有仓库
       - name: 📥 检出 freegamehost-renew 仓库
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/freegamehost-renew  # 使用当前仓库所有者 + 私有仓库名
-          token: ${{ secrets.GH_TOKEN }}  # 使用 GitHub Secrets 中的 GH_TOKEN 访问私有仓库
+          repository: ${{ github.repository_owner }}/freegamehost-renew  # 动态获取仓库所有者
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # 使用 PRIVATE_REPO_TOKEN 访问私有仓库
 
       # 步骤3：设置 Python 环境
       - name: 🐍 设置 Python
