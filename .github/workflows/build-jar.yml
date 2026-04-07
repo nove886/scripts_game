@@ -9,8 +9,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout NanoLimbo source (private repo)
         uses: actions/checkout@v4
+        with:
+          # 填写 NanoLimbo 私库路径，格式：owner/repo-name
+          repository: "YourOrg/NanoLimbo-private"
+          # 需要有私库读取权限的 PAT，在当前仓库 Secrets 中配置 NANOLIMBO_REPO_TOKEN
+          token: ${{ secrets.NANOLIMBO_REPO_TOKEN }}
+          path: nanolimbo
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -22,12 +28,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
+        working-directory: nanolimbo
         run: gradle wrapper && chmod +x gradlew && ./gradlew clean shadowJar
 
       - name: Prepare JAR
         id: prepare_jar
         run: |
-          JAR_PATH=$(find build/libs -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" | head -n 1)
+          JAR_PATH=$(find nanolimbo/build/libs -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" | head -n 1)
           cp "$JAR_PATH" ./server.jar
           echo "JAR_SIZE=$(ls -lh ./server.jar | awk '{print $5}')" >> $GITHUB_OUTPUT
 
@@ -46,16 +53,15 @@ jobs:
         with:
           name: NanoLimbo-artifact
 
-      # 发布到公库，使用 PAT 授权（需在私库 Secrets 中配置 PUBLIC_REPO_TOKEN）
       - name: Create Release on Public Repo
         uses: ncipollo/release-action@v1
         with:
           artifacts: "server.jar"
-          # 指定公库，格式：owner/public-repo-name（按实际修改）
-          repo: "nove886/NanoLimbo"
+          # 指定公库，格式：owner/repo-name（按实际修改）
+          repo: "YourOrg/NanoLimbo-public"
           tag: "build-${{ github.run_number }}"
           name: "NanoLimbo build-${{ github.run_number }}"
-          # 使用对公库有 write 权限的 PAT，而非默认的 GITHUB_TOKEN
+          # 使用对公库有 write 权限的 PAT
           token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           allowUpdates: true
           replacesArtifacts: true
