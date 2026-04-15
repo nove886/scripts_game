@@ -74,6 +74,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y xvfb
+
+          cd private_js   # ★★★ 关键修复点 ★★★
+
           npm install
           npx playwright install-deps chrome
           
@@ -101,7 +104,7 @@ jobs:
         if: env.SHOULD_RUN == 'true'
         env: ${{ secrets }}
         run: |
-          cd private_js
+          cd private_js   # ★★★ 第二个关键修复点 ★★★
           xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" npm start
 
       - name: 📸 Upload Debug Screenshots
