@@ -2,9 +2,8 @@ name: VPS8 Daily (HY2)
 
 on:
   workflow_dispatch:
-
   schedule:
-    - cron: '0 17 * * *'  # 每天 UTC 17 点（北京时间 1 点）
+    - cron: '0 11 * * *'
 
 jobs:
   run:
@@ -13,13 +12,13 @@ jobs:
 
     steps:
       # =========================
-      # 📥 拉主仓库
+      # 📥 主仓库
       # =========================
       - name: Checkout main repo
         uses: actions/checkout@v4
 
       # =========================
-      # 🔐 拉私有仓库（脚本）
+      # 🔐 私库脚本
       # =========================
       - name: Checkout private repo
         uses: actions/checkout@v4
@@ -29,7 +28,7 @@ jobs:
           path: scripts
 
       # =========================
-      # ⏳ 随机延迟（防风控）
+      # ⏳ 随机延迟
       # =========================
       - name: Random delay
         run: |
@@ -38,15 +37,7 @@ jobs:
           sleep $delay
 
       # =========================
-      # 🟢 Node.js
-      # =========================
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # =========================
-      # 🐍 Python（语音识别）
+      # 🐍 Python
       # =========================
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -54,13 +45,10 @@ jobs:
           python-version: 3.11
 
       # =========================
-      # 📦 安装依赖
+      # 📦 安装系统依赖
       # =========================
-      - name: Install dependencies
+      - name: Install system deps
         run: |
-          npm init -y
-          npm install playwright axios
-
           sudo apt-get update
           sudo apt-get install -y \
             xvfb \
@@ -68,22 +56,45 @@ jobs:
             curl \
             pulseaudio \
             fonts-liberation \
+            fonts-noto-cjk \
+            fonts-wqy-zenhei \
             libnss3 \
             libatk-bridge2.0-0 \
             libgtk-3-0 \
             libxss1 \
-            libasound2t64
+            libasound2t64 \
+            libgbm1 \
+            libxshmfence1 \
+            libxrandr2 \
+            libxdamage1 \
+            libxfixes3 \
+            libxcomposite1 \
+            libxcursor1 \
+            libxi6 \
+            libxtst6 \
+            libappindicator3-1 \
+            libdbus-1-3
 
-          pip install SpeechRecognition pydub
+          fc-cache -fv
 
       # =========================
-      # 🌐 安装 Chromium
+      # 🌐 安装 Chrome
       # =========================
-      - name: Install Chromium
-        run: npx playwright install chromium
+      - name: Install Chrome
+        run: |
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
       # =========================
-      # 🚀 安装 Hysteria2
+      # 🐍 Python 依赖（关键修复）
+      # =========================
+      - name: Install Python deps
+        run: |
+          pip install --upgrade pip
+          pip install seleniumbase requests
+
+      # =========================
+      # 🚀 HY2
       # =========================
       - name: Install Hysteria2
         run: |
@@ -94,7 +105,7 @@ jobs:
           hysteria version
 
       # =========================
-      # ▶️ 运行脚本（用私库里的）
+      # ▶️ 运行脚本
       # =========================
       - name: Run Script
         env:
@@ -104,4 +115,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           mkdir -p scripts/screenshots
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node scripts/main.js
+
+          xvfb-run -a \
+            --server-args="-screen 0 1920x1080x24" \
+            python3 scripts/main.py
