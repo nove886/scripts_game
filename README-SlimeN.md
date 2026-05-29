@@ -1,13 +1,12 @@
-必填 变量
+必填 秘密
+秘密 名称说明示別SLIME_EMAILDiscord 账号邮箱 (用于登录 SlimeNodes)you@example.comSLIME_PASSWORDDiscord 账号密码yourpassword
 
-秘密 名称                      说明                                            示別
-SLIME_EMAIL                    Discord 账号邮箱 (用于登录 SlimeNodes)          you@example.com
-SLIME_PASSWORD                 Discord 账号密码                                yourpassword
+新选 秘密
+秘密 名称说明示別TELEGRAM_CHAT_IDTelegram 的 推送的 厨送的目标 聊天識別碼123456789TELEGRAM_BOT_TOKENTelegram 機器人 的 的 代幣7xxxxxxx:AAxxxxxxSLIME_GOST_PROXY高 上游代理地址 (輔填则直连)socks5://user:pass@host:portPRIVATE_REPO_TOKENGitHub PAT(仅)slime-renew.yml需要)ghp_xxxxxxxx
 
-选填 变量
-
-秘密 名称                      说明                                            示別
-TELEGRAM_CHAT_ID               Telegram 的 推送的 厨送的目标 聊天識別碼        123456789
-TELEGRAM_BOT_TOKEN             Telegram 機器人 的 的 代幣                      7xxxxxxx:AAxxxxxx
-SLIME_GOST_PROXY               游代理地址 (輔填则直连)                         socks5://user:pass@host:port
-PRIVATE_REPO_TOKEN             GitHub PAT(仅)slime-renew.yml需要)              ghp_xxxxxxxx
+账号密码格式
+[
+  {"email": "account1@example.com", "password": "password1"},
+  {"email": "account2@example.com", "password": "password2"},
+  {"email": "account3@example.com", "password": "password3"}
+]
