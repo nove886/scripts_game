@@ -6,6 +6,7 @@ on:
 env:
   PYTHONIOENCODING: utf-8
   PROXY: socks5://127.0.0.1:1080
+  KATA_LINK: ${{ secrets.KATA_LINK }}
 
 jobs:
   run_renewal:
@@ -33,9 +34,7 @@ jobs:
         run: seleniumbase install chromedriver
 
       - name: Launch proxy tunnel
-        if: ${{ secrets.KATA_LINK != '' }}
-        env:
-          VLINK: ${{ secrets.KATA_LINK }}
+        if: ${{ env.KATA_LINK != '' }}
         run: bash scripts/setup_proxy.sh
 
       - name: Run Task (CF-Bypass Mode)
