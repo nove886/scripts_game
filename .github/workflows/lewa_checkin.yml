@@ -1,0 +1,48 @@
+name: 乐蛙 GaGaLe 每日自动签到
+
+on:
+  schedule:
+    # UTC 0:10，对应北京时间 8:10，可自行调整
+    - cron: "10 0 * * *"
+  workflow_dispatch: {}   # 允许在 Actions 页手动触发
+
+permissions:
+  contents: write   # 需要写权限，才能把 time.txt 提交回本仓库
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取当前仓库（scripts_game，用于稍后写入 time.txt）
+        uses: actions/checkout@v4
+
+      - name: 拉取私有仓库中的签到脚本（lewa_gagale_checkin）
+        uses: actions/checkout@v4
+        with:
+          repository: nove886/lewa_gagale_checkin
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private_repo
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 执行签到
+        env:
+          EMBY_USERNAME: ${{ secrets.EMBY_USERNAME }}
+          EMBY_PASSWORD: ${{ secrets.EMBY_PASSWORD }}
+        run: python private_repo/checkin.py
+
+      - name: 更新 lewa/time.txt（防止 Actions 因仓库不活跃被自动禁用）
+        run: |
+          mkdir -p lewa
+          date -u "+%Y-%m-%d %H:%M:%S UTC" > lewa/time.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lewa/time.txt
+          git diff --cached --quiet || git commit -m "chore: update time.txt [skip ci]"
+          git push
