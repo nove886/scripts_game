@@ -53,13 +53,28 @@ jobs:
       # 步骤 4: 安装依赖
       - name: 📚 安装 Python 依赖
         run: |
-          pip install requests
+          pip install requests pysocks
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
             echo "⚠️ 未找到 requirements.txt，跳过依赖安装"
           fi
         working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      # 步骤 4.5: 安装 Hysteria2（如果配置了代理）
+      - name: 📡 安装 Hysteria2
+        run: |
+          if [ -n "${{ secrets.HY2_PROXY_URL }}" ]; then
+            echo "安装 Hysteria2..."
+            curl -L -o hysteria \
+              https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
+            chmod +x hysteria
+            sudo mv hysteria /usr/local/bin/hysteria
+            hysteria version
+            echo "✅ Hysteria2 安装完成"
+          else
+            echo "⚠️ 未配置代理，跳过 Hysteria2 安装"
+          fi
 
       # 步骤 5: 随机延迟，避免固定时间点被风控识别
       - name: ⏳ 添加随机延迟
@@ -75,6 +90,8 @@ jobs:
           EMBY_PASSWORD: ${{ secrets.EMBY_PASSWORD }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          HY2_PROXY_URL: ${{ secrets.HY2_PROXY_URL }}
+          SOCKS_PORT: ${{ secrets.SOCKS_PORT || '51080' }}
         run: python ${{ env.SCRIPT_NAME }}
         working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
 
