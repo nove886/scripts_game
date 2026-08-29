@@ -1,48 +1,97 @@
-name: 乐蛙 GaGaLe 每日自动签到
+name: 🔄 Lewa GaGaLe Auto Checkin
 
 on:
+  workflow_dispatch:
+
   schedule:
-    # UTC 0:10，对应北京时间 8:10，可自行调整
+    # 2次签到，确保不漏签
     - cron: "10 0 * * *"
-  workflow_dispatch: {}   # 允许在 Actions 页手动触发
+    - cron: "10 12 * * *"
 
 permissions:
-  contents: write   # 需要写权限，才能把 time.txt 提交回本仓库
+  contents: write
+
+concurrency:
+  group: lewa-checkin
+  cancel-in-progress: false
 
 jobs:
-  checkin:
+  run:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_DIR: lewa
+      SCRIPT_NAME: checkin.py
+      SCRIPT_DESC: Lewa GaGaLe 签到脚本
+
     steps:
-      - name: 拉取当前仓库（scripts_game，用于稍后写入 time.txt）
+      # 步骤 1: 检出公开仓库（当前仓库 scripts_game）
+      - name: 📥 检出公开仓库
         uses: actions/checkout@v4
 
-      - name: 拉取私有仓库中的签到脚本（lewa_gagale_checkin）
+      # 步骤 1.5: 创建带命名空间的私库检出目录，避免和其他项目冲突
+      - name: 📁 创建输出目录
+        run: mkdir -p ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+        working-directory: .
+
+      # 步骤 2: 检出私有仓库（存放实际签到脚本）
+      - name: 🔐 检出私有仓库
         uses: actions/checkout@v4
         with:
           repository: nove886/lewa_gagale_checkin
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          path: private_repo
+          ref: main
+          path: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+          fetch-depth: 1
 
-      - name: 配置 Python
+      # 步骤 3: 设置 Python 环境
+      - name: 🐍 设置 Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: 安装依赖
-        run: pip install requests
+      # 步骤 4: 安装依赖
+      - name: 📚 安装 Python 依赖
+        run: |
+          pip install requests
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "⚠️ 未找到 requirements.txt，跳过依赖安装"
+          fi
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
 
-      - name: 执行签到
+      # 步骤 5: 随机延迟，避免固定时间点被风控识别
+      - name: ⏳ 添加随机延迟
+        run: |
+          delay=$((RANDOM % 120))
+          echo "随机延迟: ${delay}秒"
+          sleep $delay
+
+      # 步骤 6: 执行签到脚本
+      - name: 🚀 执行 ${{ env.SCRIPT_DESC }}
         env:
           EMBY_USERNAME: ${{ secrets.EMBY_USERNAME }}
           EMBY_PASSWORD: ${{ secrets.EMBY_PASSWORD }}
-        run: python private_repo/checkin.py
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python ${{ env.SCRIPT_NAME }}
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
 
-      - name: 更新 lewa/time.txt（防止 Actions 因仓库不活跃被自动禁用）
+      # 步骤 7: 提交时间文件到公开库（无论签到是否成功都执行，用于防止 Actions 休眠）
+      - name: ⏱️ 提交时间文件
+        if: always()
         run: |
-          mkdir -p lewa
-          date -u "+%Y-%m-%d %H:%M:%S UTC" > lewa/time.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add lewa/time.txt
-          git diff --cached --quiet || git commit -m "chore: update time.txt [skip ci]"
-          git push
+          mkdir -p lewa && echo "$(date +'%Y-%m-%d %H:%M:%S')" > lewa/time.txt
+          git add lewa/time.txt 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "无变化，无需提交"
+          else
+            TIMESTAMP=$(date +'%Y-%m-%d %H:%M:%S')
+            git commit -m "⏱️ 更新 lewa 时间文件: $TIMESTAMP"
+            git fetch origin main
+            git push -f origin HEAD:main
+            echo "✅ 更改已推送"
+          fi
