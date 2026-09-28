@@ -1,78 +1,77 @@
 name: HiDNS Auto Renew
 
+# 公开库（scripts_game）专用：只负责每月定时触发，不含任何业务 Secrets。
+# 真正的续期在私库执行，见 .github/workflows/HiDNS-renew-run.yml。
+#
+# 本仓库需要配置：
+#   Secrets   PRIVATE_REPO_PAT   - 能访问私库的 PAT（fine-grained: Contents:read + Actions:write）
+#   Variables PY_PRIVATE_REPO    - 私库仓库名，格式 owner/repo
+
 on:
   schedule:
-    # 每月 1 日 UTC 20:17（北京时间 2 日 04:17）跑一次
+    # 每月 1 日 UTC 20:17（北京时间 2 日 04:17）
     - cron: "17 20 1 * *"
-  workflow_dispatch: {}   # 支持手动触发
+  workflow_dispatch: {}   # 手动触发（调试用）
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hidoha-renew-trigger
+  cancel-in-progress: false
 
 jobs:
-  renew:
+  trigger-private:
     runs-on: ubuntu-latest
     steps:
-      # 公私库分离：公开仓库一律不执行续期（避免账号动态/日志被公开看到）
-      # Variables：
-      #   PY_PRIVATE_REPO   - 私库仓库名（owner/repo，如 my-name/hidoha-auto-renew），
-      #                       被拦下时提示你该去哪个私有仓库跑
-      #   ALLOW_PUBLIC_RUN  - 填 true 则公开仓库也放行（不推荐）
-      - name: Guard - private repo only
+      - name: 触发私库续期
         env:
-          GH_TOKEN_FOR_API: ${{ github.token }}
-          REPO_FULL: ${{ github.repository }}
-          VAR_PRIVATE_REPO: ${{ vars.PY_PRIVATE_REPO }}
-          VAR_ALLOW_PUBLIC_RUN: ${{ vars.ALLOW_PUBLIC_RUN }}
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+          TARGET_REPO: ${{ vars.PY_PRIVATE_REPO }}
         run: |
-          RESP=$(curl -sS -H "Authorization: Bearer ${GH_TOKEN_FOR_API}" \
-            "https://api.github.com/repos/${REPO_FULL}") || RESP=""
-          echo "API 返回: ${RESP}"
-          # 注意 jq 的 `//` 对 false 也触发，必须显式分支，否则公开仓库(private=false)会被误判为查询失败
-          PRIV=$(printf '%s' "$RESP" | jq -r 'if (.private == true) then "true" elif (.private == false) then "false" else empty end' 2>/dev/null || true)
-          # jq 不可用时用 python3 兜底
-          if [ -z "$PRIV" ]; then
-            PRIV=$(printf '%s' "$RESP" | python3 -c "import sys,json; p=json.load(sys.stdin).get('private'); print('true' if p is True else ('false' if p is False else ''))" 2>/dev/null || true)
-          fi
-          echo "仓库: ${REPO_FULL}  查询结果 private=[${PRIV}]"
-          if [ -n "$VAR_PRIVATE_REPO" ]; then
-            echo "📌 指定的私库仓库: ${VAR_PRIVATE_REPO}"
-          fi
-          if [ -z "$PRIV" ]; then
-            echo "⚠️ 无法查询仓库可见性（GitHub API 返回异常或 jq/python3 缺失），按公私库分离原则默认中止。"
-            echo "若确认仓库是私有的，可在 Variables 设 ALLOW_PUBLIC_RUN=true 放行。"
-            if [ "$VAR_ALLOW_PUBLIC_RUN" = "true" ]; then
-              exit 0
-            fi
+          if [ -z "$TARGET_REPO" ]; then
+            echo "❌ 未设置 Variables.PY_PRIVATE_REPO（私库仓库名，格式 owner/repo）"
+            echo "   Settings → Secrets and variables → Actions → Variables → PY_PRIVATE_REPO"
             exit 1
           fi
-          if [ "$PRIV" != "true" ] && [ "$VAR_ALLOW_PUBLIC_RUN" != "true" ]; then
-            echo "当前是公开仓库，按公私库分离原则不在此执行续期。"
-            if [ -n "$VAR_PRIVATE_REPO" ]; then
-              echo "请把本仓库代码推到私库 https://github.com/${VAR_PRIVATE_REPO} 并在那里配置 Secrets 运行；"
-            else
-              echo "请把本仓库代码推到一个【私有】仓库并在那里配置 Secrets 运行；"
-              echo "（可在 Variables 设置 PY_PRIVATE_REPO=owner/repo 让提示直接带上私库地址）"
-            fi
-            echo "或在 Settings → Secrets and variables → Actions → Variables 添加 ALLOW_PUBLIC_RUN=true 放行。"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "❌ 未配置 Secret PRIVATE_REPO_PAT（访问私库的 PAT）"
+            echo "   Settings → Secrets and variables → Actions → Secrets → PRIVATE_REPO_PAT"
             exit 1
           fi
-          echo "✔️ 仓库可见性校验通过（private=${PRIV}）"
 
-      - uses: actions/checkout@v4
+          echo "→ 触发私库 https://github.com/${TARGET_REPO} 执行续期"
+          HTTP=$(curl -sS -o resp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${TARGET_REPO}/dispatches" \
+            -d "{\"event_type\":\"hidoha-renew\",\"client_payload\":{\"source\":\"${GITHUB_REPOSITORY}\",\"run_id\":\"${GITHUB_RUN_ID}\"}}") || HTTP="000"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+          echo "HTTP ${HTTP}"
+          if [ -s resp.json ]; then
+            cat resp.json
+            echo ""
+          fi
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run renew
-        env:
-          EMAIL: ${{ secrets.HIDOHA_EMAIL }}
-          PASSWORD: ${{ secrets.HIDOHA_PASSWORD }}
-          API_TOKEN: ${{ secrets.HIDOHA_API_TOKEN }}
-          ACCOUNTS: ${{ secrets.HIDOHA_ACCOUNTS }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY: ${{ secrets.HIDOHA_PROXY }}
-          DUE_DAYS: ${{ vars.DUE_DAYS }}
-        run: python app.py
+          case "$HTTP" in
+            204)
+              echo "✅ 已触发私库续期（执行日志去私库仓库的 Actions 页面查看）"
+              ;;
+            401)
+              echo "❌ PAT 无效或已过期：重新生成 PRIVATE_REPO_PAT（fine-grained 需 Contents:read + Actions:write）"
+              exit 1
+              ;;
+            403)
+              echo "❌ PAT 权限不足或仓库无此工作流：确认私库已有 HiDNS-renew-run.yml 且在默认分支，PAT 对该库有 Actions:write"
+              exit 1
+              ;;
+            404)
+              echo "❌ 私库不存在或 PAT 无法访问：检查 PY_PRIVATE_REPO 是否为 owner/repo 且 PAT 指向该库"
+              exit 1
+              ;;
+            *)
+              echo "❌ 触发失败（HTTP ${HTTP}）"
+              exit 1
+              ;;
+          esac

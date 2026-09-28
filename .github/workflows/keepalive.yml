@@ -1,0 +1,28 @@
+name: Keepalive
+
+# GitHub 对公开仓库：60 天无提交活动会自动停用定时工作流。
+# 本工作流每月提交一次时间戳，保持 scripts_game 活跃，防止触发器被休眠。
+
+on:
+  schedule:
+    - cron: "37 3 15 * *"   # 每月 15 日 UTC 03:37（北京时间 11:37）
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Commit timestamp
+        run: |
+          TS=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          echo "keepalive: $TS" > .keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .keepalive
+          git diff --cached --quiet || git commit -m "chore: keepalive $TS"
+          git push
