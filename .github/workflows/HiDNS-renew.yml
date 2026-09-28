@@ -16,28 +16,37 @@ jobs:
       #                       被拦下时提示你该去哪个私有仓库跑
       #   ALLOW_PUBLIC_RUN  - 填 true 则公开仓库也放行（不推荐）
       - name: Guard - private repo only
+        env:
+          GH_TOKEN_FOR_API: ${{ github.token }}
+          REPO_FULL: ${{ github.repository }}
+          VAR_PRIVATE_REPO: ${{ vars.PY_PRIVATE_REPO }}
+          VAR_ALLOW_PUBLIC_RUN: ${{ vars.ALLOW_PUBLIC_RUN }}
         run: |
-          RESP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}")
-          PRIV=$(echo "$RESP" | jq -r '.private // empty' 2>/dev/null || true)
-          echo "仓库: ${{ github.repository }}  查询结果 private=[${PRIV}]"
-          PRIVATE_REPO="${{ vars.PY_PRIVATE_REPO }}"
-          if [ -n "$PRIVATE_REPO" ]; then
-            echo "📌 指定的私库仓库: $PRIVATE_REPO"
+          RESP=$(curl -sS -H "Authorization: Bearer ${GH_TOKEN_FOR_API}" \
+            "https://api.github.com/repos/${REPO_FULL}") || RESP=""
+          echo "API 返回: ${RESP}"
+          # 注意 jq 的 `//` 对 false 也触发，必须显式分支，否则公开仓库(private=false)会被误判为查询失败
+          PRIV=$(printf '%s' "$RESP" | jq -r 'if (.private == true) then "true" elif (.private == false) then "false" else empty end' 2>/dev/null || true)
+          # jq 不可用时用 python3 兜底
+          if [ -z "$PRIV" ]; then
+            PRIV=$(printf '%s' "$RESP" | python3 -c "import sys,json; p=json.load(sys.stdin).get('private'); print('true' if p is True else ('false' if p is False else ''))" 2>/dev/null || true)
+          fi
+          echo "仓库: ${REPO_FULL}  查询结果 private=[${PRIV}]"
+          if [ -n "$VAR_PRIVATE_REPO" ]; then
+            echo "📌 指定的私库仓库: ${VAR_PRIVATE_REPO}"
           fi
           if [ -z "$PRIV" ]; then
-            echo "⚠️ 无法查询仓库可见性（GitHub API 返回异常，可能是网络/限流），原始返回："
-            printf '%s\n' "$RESP"
-            echo "按公私库分离原则默认中止。若确认仓库是私有的，可在 Variables 设 ALLOW_PUBLIC_RUN=true 放行。"
-            if [ "${{ vars.ALLOW_PUBLIC_RUN }}" = "true" ]; then
+            echo "⚠️ 无法查询仓库可见性（GitHub API 返回异常或 jq/python3 缺失），按公私库分离原则默认中止。"
+            echo "若确认仓库是私有的，可在 Variables 设 ALLOW_PUBLIC_RUN=true 放行。"
+            if [ "$VAR_ALLOW_PUBLIC_RUN" = "true" ]; then
               exit 0
             fi
             exit 1
           fi
-          if [ "$PRIV" != "true" ] && [ "${{ vars.ALLOW_PUBLIC_RUN }}" != "true" ]; then
+          if [ "$PRIV" != "true" ] && [ "$VAR_ALLOW_PUBLIC_RUN" != "true" ]; then
             echo "当前是公开仓库，按公私库分离原则不在此执行续期。"
-            if [ -n "$PRIVATE_REPO" ]; then
-              echo "请把本仓库代码推到私库 https://github.com/$PRIVATE_REPO 并在那里配置 Secrets 运行；"
+            if [ -n "$VAR_PRIVATE_REPO" ]; then
+              echo "请把本仓库代码推到私库 https://github.com/${VAR_PRIVATE_REPO} 并在那里配置 Secrets 运行；"
             else
               echo "请把本仓库代码推到一个【私有】仓库并在那里配置 Secrets 运行；"
               echo "（可在 Variables 设置 PY_PRIVATE_REPO=owner/repo 让提示直接带上私库地址）"
@@ -45,7 +54,7 @@ jobs:
             echo "或在 Settings → Secrets and variables → Actions → Variables 添加 ALLOW_PUBLIC_RUN=true 放行。"
             exit 1
           fi
-          echo "✔️ 仓库可见性校验通过（private=$PRIV）"
+          echo "✔️ 仓库可见性校验通过（private=${PRIV}）"
 
       - uses: actions/checkout@v4
 
