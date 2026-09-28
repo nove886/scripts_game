@@ -34,6 +34,26 @@ jobs:
             echo "   Settings → Secrets and variables → Actions → Variables → PY_PRIVATE_REPO"
             exit 1
           fi
+          # 格式校验：自动纠正常见误粘贴（完整 URL / .git / 尾斜杠），其余严格拦截
+          case "$TARGET_REPO" in
+            http://github.com/*|https://github.com/*|http://www.github.com/*|https://www.github.com/*)
+              TARGET_REPO="${TARGET_REPO#*github.com/}"
+              echo "ℹ️ 从完整链接识别到私库: ${TARGET_REPO}"
+              ;;
+            http://*|https://*)
+              echo "❌ PY_PRIVATE_REPO 只能是 owner/repo（或 github.com/owner/repo），当前: ${TARGET_REPO}"
+              exit 1
+              ;;
+          esac
+          TARGET_REPO="${TARGET_REPO%.git}"
+          TARGET_REPO="${TARGET_REPO%/}"
+          if ! printf '%s' "$TARGET_REPO" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then
+            echo "❌ PY_PRIVATE_REPO 格式错误: [${TARGET_REPO}]"
+            echo "   正确格式: owner/repo，例如 nove886/hidoha-renew"
+            echo "   不带协议、.git、尾部斜杠、空格，owner 和 repo 各一段"
+            exit 1
+          fi
+          echo "🎯 目标私库: https://github.com/${TARGET_REPO}"
           if [ -z "$GH_TOKEN" ]; then
             echo "❌ 未配置 Secret PRIVATE_REPO_PAT（访问私库的 PAT）"
             echo "   Settings → Secrets and variables → Actions → Secrets → PRIVATE_REPO_PAT"
