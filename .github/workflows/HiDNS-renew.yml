@@ -1,0 +1,44 @@
+name: HiDNS Auto Renew
+
+on:
+  schedule:
+    # 每月 1 日 UTC 20:17（北京时间 2 日 04:17）跑一次
+    - cron: "17 20 1 * *"
+  workflow_dispatch: {}   # 支持手动触发
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    steps:
+      # 公私库分离：公开仓库一律不执行续期（避免暴露账号动态/被服务商风控）
+      # 确要在公开仓库运行，可在仓库 Variables 里加 ALLOW_PUBLIC_RUN=true
+      - name: Guard - private repo only
+        run: |
+          PRIV=$(curl -sf -H "Authorization: Bearer ${{ github.token }}" \
+            https://api.github.com/repos/${{ github.repository }} | jq -r '.private')
+          if [ "$PRIV" != "true" ] && [ "${{ vars.ALLOW_PUBLIC_RUN }}" != "true" ]; then
+            echo "当前是公开仓库，按公私库分离原则不在此执行续期。"
+            echo "请把本仓库代码推到一个【私有】仓库并在那里配置 Secrets 运行。"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run renew
+        env:
+          EMAIL: ${{ secrets.HIDOHA_EMAIL }}
+          PASSWORD: ${{ secrets.HIDOHA_PASSWORD }}
+          API_TOKEN: ${{ secrets.HIDOHA_API_TOKEN }}
+          ACCOUNTS: ${{ secrets.HIDOHA_ACCOUNTS }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY: ${{ secrets.HIDOHA_PROXY }}
+          DUE_DAYS: ${{ vars.DUE_DAYS }}
+        run: python app.py
