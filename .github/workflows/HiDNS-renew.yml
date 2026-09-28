@@ -10,17 +10,42 @@ jobs:
   renew:
     runs-on: ubuntu-latest
     steps:
-      # 公私库分离：公开仓库一律不执行续期（避免暴露账号动态/被服务商风控）
-      # 确要在公开仓库运行，可在仓库 Variables 里加 ALLOW_PUBLIC_RUN=true
+      # 公私库分离：公开仓库一律不执行续期（避免账号动态/日志被公开看到）
+      # Variables：
+      #   PY_PRIVATE_REPO   - 私库仓库名（owner/repo，如 my-name/hidoha-auto-renew），
+      #                       被拦下时提示你该去哪个私有仓库跑
+      #   ALLOW_PUBLIC_RUN  - 填 true 则公开仓库也放行（不推荐）
       - name: Guard - private repo only
         run: |
-          PRIV=$(curl -sf -H "Authorization: Bearer ${{ github.token }}" \
-            https://api.github.com/repos/${{ github.repository }} | jq -r '.private')
-          if [ "$PRIV" != "true" ] && [ "${{ vars.ALLOW_PUBLIC_RUN }}" != "true" ]; then
-            echo "当前是公开仓库，按公私库分离原则不在此执行续期。"
-            echo "请把本仓库代码推到一个【私有】仓库并在那里配置 Secrets 运行。"
+          RESP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}")
+          PRIV=$(echo "$RESP" | jq -r '.private // empty' 2>/dev/null || true)
+          echo "仓库: ${{ github.repository }}  查询结果 private=[${PRIV}]"
+          PRIVATE_REPO="${{ vars.PY_PRIVATE_REPO }}"
+          if [ -n "$PRIVATE_REPO" ]; then
+            echo "📌 指定的私库仓库: $PRIVATE_REPO"
+          fi
+          if [ -z "$PRIV" ]; then
+            echo "⚠️ 无法查询仓库可见性（GitHub API 返回异常，可能是网络/限流），原始返回："
+            printf '%s\n' "$RESP"
+            echo "按公私库分离原则默认中止。若确认仓库是私有的，可在 Variables 设 ALLOW_PUBLIC_RUN=true 放行。"
+            if [ "${{ vars.ALLOW_PUBLIC_RUN }}" = "true" ]; then
+              exit 0
+            fi
             exit 1
           fi
+          if [ "$PRIV" != "true" ] && [ "${{ vars.ALLOW_PUBLIC_RUN }}" != "true" ]; then
+            echo "当前是公开仓库，按公私库分离原则不在此执行续期。"
+            if [ -n "$PRIVATE_REPO" ]; then
+              echo "请把本仓库代码推到私库 https://github.com/$PRIVATE_REPO 并在那里配置 Secrets 运行；"
+            else
+              echo "请把本仓库代码推到一个【私有】仓库并在那里配置 Secrets 运行；"
+              echo "（可在 Variables 设置 PY_PRIVATE_REPO=owner/repo 让提示直接带上私库地址）"
+            fi
+            echo "或在 Settings → Secrets and variables → Actions → Variables 添加 ALLOW_PUBLIC_RUN=true 放行。"
+            exit 1
+          fi
+          echo "✔️ 仓库可见性校验通过（private=$PRIV）"
 
       - uses: actions/checkout@v4
 
