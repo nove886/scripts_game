@@ -1,305 +1,121 @@
-### Cleanup Log### Cleanup Log (2026-10-23 15:59:46)
-	• No old workflow runs to delete
-	• No old artifacts to delete
+# Lewa GaGaLe 自动签到部署说明
 
-### Cleanup Log### Cleanup Log (2026-10-16 15:34:04)
-	• No old workflow runs to delete
-	• No old artifacts to delete
+自动登录 [Lewa GaGaLe](https://ue2.taotu.ink) 完成每日签到，并支持**积分余额查询**、**自动兑换月卡**、**Telegram 通知推送**与 **Hysteria2 代理**，由 GitHub Actions 定时运行。
 
-### Cleanup Log### Cleanup Log (2026-10-09 17:41:57)
-	• No old workflow runs to delete
-	• No old artifacts to delete
+## 仓库结构
 
-### Cleanup Log### Cleanup Log (2026-10-02 17:04:29)
-	• No old workflow runs to delete
-	• No old artifacts to delete
+签到涉及两个仓库分工：
 
-### Cleanup Log### Cleanup Log (2026-09-25 16:14:23)
-	• No old workflow runs to delete
-	• Deleted artifact 10518684745
-	• Deleted artifact 10518574956
-	• Deleted artifact 10418571233
-	• Deleted artifact 10418137887
-	• Deleted artifact 10324537035
-	• Deleted artifact 10281468176
-	• Deleted artifact 10281082766
-	• Deleted artifact 7101214190
-	• Deleted artifact 7098263218
-	• Deleted artifact 7096691239
-	• Deleted artifact 7095025527
-	• Deleted artifact 7094048426
-	• Deleted artifact 7092698136
-	• Deleted artifact 7089157016
-	• Deleted artifact 7088317570
-	• Deleted artifact 7082991396
-	• Deleted artifact 7080465817
-	• Deleted artifact 7078649615
-	• Deleted artifact 7075226892
-	• Deleted artifact 7074790826
-	• Deleted artifact 7071895359
-	• Deleted artifact 7070138146
-	• Deleted artifact 7068319664
-	• Deleted artifact 7067827705
+| 仓库 | 可见性 | 存放内容 |
+|---|---|---|
+| 公库（如 `scripts_game`） | 公开 | `.github/workflows/lewa_checkin.yml`（workflow）、`lewa/time.txt`（防休眠时间戳）、全部 Secrets/Variables |
+| 私库 `lewa_gagale_checkin` | 私有 | `checkin.py`（签到脚本本体，不含任何账号密码） |
 
-### Cleanup Log### Cleanup Log (2026-09-18 15:39:19)
-	• No old workflow runs to delete
-	• Deleted artifact 10123852988
-	• Deleted artifact 10123851614
-	• Deleted artifact 10033012257
-	• Deleted artifact 10033010288
-	• Deleted artifact 9976019005
-	• Deleted artifact 9976009947
-	• Deleted artifact 7143358837
-	• Deleted artifact 7139839148
-	• Deleted artifact 7134400971
-	• Deleted artifact 7132790805
-	• Deleted artifact 7130153302
-	• Deleted artifact 7127405184
-	• Deleted artifact 7126708979
-	• Deleted artifact 7123689558
-	• Deleted artifact 7122435119
-	• Deleted artifact 7120786678
-	• Deleted artifact 7119384986
-	• Deleted artifact 7115645820
-	• Deleted artifact 7114890901
-	• Deleted artifact 7109830650
-	• Deleted artifact 7106792984
-	• Deleted artifact 7106412000
-	• Deleted artifact 7101695015
+之所以拆成两个仓库：workflow 定时任务必须放在有效仓库里跑，而签到脚本单独放私库，改脚本时不用动公库；workflow 通过 PAT 拉取私库代码执行。
 
-### Cleanup Log### Cleanup Log (2026-09-11 15:31:26)
-	• No old workflow runs to delete
-	• Deleted artifact 9911979886
-	• Deleted artifact 9911970512
-	• Deleted artifact 9819667502
-	• Deleted artifact 9819658909
-	• Deleted artifact 9778370146
-	• Deleted artifact 9778368956
-	• Deleted artifact 9720883965
-	• Deleted artifact 9720882435
-	• Deleted artifact 7176476122
-	• Deleted artifact 7176075221
-	• Deleted artifact 7175315171
-	• Deleted artifact 7174257534
-	• Deleted artifact 7172376881
-	• Deleted artifact 7171143665
-	• Deleted artifact 7169921334
-	• Deleted artifact 7168103324
-	• Deleted artifact 7165401524
-	• Deleted artifact 7161735995
-	• Deleted artifact 7158716938
-	• Deleted artifact 7155390075
-	• Deleted artifact 7152205032
-	• Deleted artifact 7149142047
-	• Deleted artifact 7147600637
-	• Deleted artifact 7145828543
+> **Secrets 配置位置**：GitHub 的 Secrets 只从**运行 workflow 的仓库**解析，所以本项目的所有 Secrets 都配置在公库；私库不需要配置任何 Secret。
 
-### Cleanup Log### Cleanup Log (2026-09-04 15:27:16)
-	• No old workflow runs to delete
-	• Deleted artifact 9671614023
-	• Deleted artifact 9671608429
-	• Deleted artifact 9577300275
-	• Deleted artifact 9577293081
-	• Deleted artifact 9498035834
-	• Deleted artifact 9498033091
-	• Deleted artifact 9458193060
-	• Deleted artifact 9458190654
-	• Deleted artifact 7185470951
-	• Deleted artifact 7184674737
-	• Deleted artifact 7183995241
-	• Deleted artifact 7183072710
-	• Deleted artifact 7181877905
-	• Deleted artifact 7180703460
-	• Deleted artifact 7180376012
-	• Deleted artifact 7180043135
-	• Deleted artifact 7179668141
-	• Deleted artifact 7179177149
-	• Deleted artifact 7178686882
-	• Deleted artifact 7178062480
-	• Deleted artifact 7177695249
-	• Deleted artifact 7177150707
+```
+公库/
+├── .github/workflows/lewa_checkin.yml   ← 签到 workflow
+└── lewa/time.txt                        ← 每次运行自动更新，防止 Actions 60 天无活动被禁用
 
-### Cleanup Log### Cleanup Log (2026-08-28 22:38:09)
-	• No old workflow runs to delete
-	• Deleted artifact 9378774297
-	• Deleted artifact 9378512754
-	• Deleted artifact 9296434327
-	• Deleted artifact 9296434119
-	• Deleted artifact 9251164820
-	• Deleted artifact 9251163732
-	• Deleted artifact 7206543708
-	• Deleted artifact 7205981182
-	• Deleted artifact 7204898268
-	• Deleted artifact 7203852854
-	• Deleted artifact 7202661400
-	• Deleted artifact 7201249386
-	• Deleted artifact 7198181982
-	• Deleted artifact 7195024896
-	• Deleted artifact 7191769751
-	• Deleted artifact 7189443541
-	• Deleted artifact 7189053286
-	• Deleted artifact 7188675847
-	• Deleted artifact 7187995861
-	• Deleted artifact 7187245071
-	• Deleted artifact 7186863566
-	• Deleted artifact 7186113820
+私库 lewa_gagale_checkin/（私有）
+└── checkin.py                           ← 实际签到脚本
+```
 
-### Cleanup Log### Cleanup Log (2026-08-21 11:39:10)
-	• No old workflow runs to delete
-	• Deleted artifact 9194346203
-	• Deleted artifact 9194342239
-	• Deleted artifact 9114895640
-	• Deleted artifact 9114892535
-	• Deleted artifact 9042555659
-	• Deleted artifact 9042555573
-	• Deleted artifact 9006071398
-	• Deleted artifact 9006070761
-	• Deleted artifact 7259526781
-	• Deleted artifact 7256737348
-	• Deleted artifact 7254073324
-	• Deleted artifact 7252777794
-	• Deleted artifact 7249801714
-	• Deleted artifact 7246132274
-	• Deleted artifact 7240004372
-	• Deleted artifact 7235078319
-	• Deleted artifact 7231407221
-	• Deleted artifact 7228209673
-	• Deleted artifact 7226860339
-	• Deleted artifact 7224014809
-	• Deleted artifact 7220636399
-	• Deleted artifact 7215065280
-	• Deleted artifact 7214019880
-	• Deleted artifact 7209279694
+## 部署步骤
 
-### Cleanup Log### Cleanup Log (2026-08-14 12:39:44)
-	• No old workflow runs to delete
-	• Deleted artifact 8944253870
-	• Deleted artifact 8944247433
-	• Deleted artifact 8868964585
-	• Deleted artifact 8822812019
-	• Deleted artifact 8822810261
-	• Deleted artifact 8804618905
-	• Deleted artifact 8804615855
-	• Deleted artifact 7300427965
-	• Deleted artifact 7300426636
-	• Deleted artifact 7300314738
-	• Deleted artifact 7297137232
-	• Deleted artifact 7292585129
-	• Deleted artifact 7291548302
-	• Deleted artifact 7291546626
-	• Deleted artifact 7288989523
-	• Deleted artifact 7284949288
-	• Deleted artifact 7282168694
-	• Deleted artifact 7279566058
-	• Deleted artifact 7277377586
-	• Deleted artifact 7273801194
-	• Deleted artifact 7268785251
-	• Deleted artifact 7264047749
+### 1. 生成 PAT（用于公库拉取私库代码）
 
-### Cleanup Log### Cleanup Log (2026-08-07 12:44:43)
-	• No old workflow runs to delete
-	• Deleted artifact 8736780086
-	• Deleted artifact 8736771642
-	• Deleted artifact 8665736273
-	• Deleted artifact 8665734948
-	• Deleted artifact 8656528123
-	• Deleted artifact 8656321130
-	• Deleted artifact 8655166386
-	• Deleted artifact 8638862742
-	• Deleted artifact 8631877714
-	• Deleted artifact 8625662122
-	• Deleted artifact 8625513224
-	• Deleted artifact 8622943258
-	• Deleted artifact 8622940171
-	• Deleted artifact 8619425398
-	• Deleted artifact 8612803788
-	• Deleted artifact 8596989791
-	• Deleted artifact 8417173169
-	• Deleted artifact 8417172297
-	• Deleted artifact 7307368272
-	• Deleted artifact 7306565888
-	• Deleted artifact 7305495752
-	• Deleted artifact 7303476795
-	• Deleted artifact 7302360385
+1. GitHub 头像 → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token
+2. Repository access 选 "Only select repositories" → 勾选 `lewa_gagale_checkin`
+3. Permissions 里给 **Contents: Read-only**
+4. 生成后复制 token（仅显示一次）
 
-### Cleanup Log### Cleanup Log (2026-07-31 13:53:13)
-	• No old workflow runs to delete
-	• Deleted artifact 8582656426
-	• Deleted artifact 8575940361
-	• Deleted artifact 8575936010
-	• Deleted artifact 8564130734
-	• Deleted artifact 8548783698
-	• Deleted artifact 8529925610
-	• Deleted artifact 8514225692
-	• Deleted artifact 8507512461
-	• Deleted artifact 8507503940
-	• Deleted artifact 8495470324
-	• Deleted artifact 8479805135
-	• Deleted artifact 8462340631
-	• Deleted artifact 8446186203
-	• Deleted artifact 8446185828
+### 2. 配置 Secrets（公库）
 
-### Cleanup Log### Cleanup Log (2026-07-24 13:38:16)
-	• No old workflow runs to delete
-	• Deleted artifact 8354566642
-	• Deleted artifact 8354563959
-	• Deleted artifact 8290314988
-	• Deleted artifact 8290311920
-	• Deleted artifact 8251813142
-	• Deleted artifact 8251812646
-	• Deleted artifact 8242361081
-	• Deleted artifact 7311659070
-	• Deleted artifact 7311264007
-	• Deleted artifact 7310651041
-	• Deleted artifact 7309861524
-	• Deleted artifact 7309118370
-	• Deleted artifact 7308501528
-	• Deleted artifact 7307845043
+在 **公库** Settings → Secrets and variables → Actions → Secrets 页签添加：
 
-### Cleanup Log### Cleanup Log (2026-07-17 13:30:25)
-	• No old workflow runs to delete
-	• Deleted artifact 8215578891
-	• Deleted artifact 8209818921
-	• Deleted artifact 8209816782
-	• Deleted artifact 8200532475
-	• Deleted artifact 8186277846
-	• Deleted artifact 8149697023
-	• Deleted artifact 8149695537
-	• Deleted artifact 8139340356
-	• Deleted artifact 8094966167
-	• Deleted artifact 8094965051
-	• Deleted artifact 8073625168
-	• Deleted artifact 8073623960
-	• Deleted artifact 7319525165
-	• Deleted artifact 7319410206
-	• Deleted artifact 7319406597
-	• Deleted artifact 7318870593
-	• Deleted artifact 7318130215
-	• Deleted artifact 7317581616
-	• Deleted artifact 7316620969
-	• Deleted artifact 7315882118
-	• Deleted artifact 7314931556
-	• Deleted artifact 7313504754
-	• Deleted artifact 7312054620
+| Secret | 必填 | 说明 |
+|---|---|---|
+| `PRIVATE_REPO_TOKEN` | ✅ | 上一步生成的 PAT，用于拉取私库代码 |
+| `EMBY_USERNAME` | ✅ | Emby 登录账号 |
+| `EMBY_PASSWORD` | 账号无密码可不填 | Emby 登录密码 |
+| `TG_BOT_TOKEN` | 可选 | Telegram Bot Token，用于推送签到结果 |
+| `TG_CHAT_ID` | 可选 | Telegram Chat ID |
+| `HY2_PROXY_URL` | 可选 | Hysteria2 代理节点链接，格式 `hysteria2://密码@host:port?insecure=1`；配置后 workflow 会自动安装 Hysteria2 并走 SOCKS5 代理 |
+| `SOCKS_PORT` | 可选 | 本地 SOCKS5 监听端口，不填默认 `51080` |
 
-### Cleanup Log### Cleanup Log (2026-07-10 14:30:16)
-	• No old workflow runs to delete
-	• Deleted artifact 8021164118
-	• Deleted artifact 8021160562
-	• Deleted artifact 7963068532
-	• Deleted artifact 7963066451
-	• Deleted artifact 7927435501
-	• Deleted artifact 7927435279
-	• Deleted artifact 7399414303
-	• Deleted artifact 7396563542
-	• Deleted artifact 7396554647
-	• Deleted artifact 7393247116
-	• Deleted artifact 7385679047
-	• Deleted artifact 7380049751
-	• Deleted artifact 7343610520
-	• Deleted artifact 7343598557
-	• Deleted artifact 7324408491
-	• Deleted artifact 7321183755
-	• Deleted artifact 7320452668
-	• Deleted artifact 7320038248
+### 3. 配置月卡自动兑换开关（可选，公库 Variables）
 
+在 **公库** Settings → Secrets and variables → Actions → **Variables** 页签添加：
+
+| Variable | 必填 | 说明 |
+|---|---|---|
+| `AUTO_REDEEM_MONTHLY` | 可选 | 自动兑换月卡总开关，**不配置 = 默认开启**。`0`/`false`/`no`/`off` 关闭，`1`/`true`/`yes`/`on` 开启 |
+
+不建变量、保持默认开启即可；想彻底关闭自动兑换时把它设为 `0`。
+
+### 4. 放置文件
+
+- `checkin.py` → 私库 `lewa_gagale_checkin` **根目录**
+- `lewa_checkin.yml` → 公库 `.github/workflows/lewa_checkin.yml`
+- `lewa/time.txt` → 公库 `lewa/time.txt`（首次放一个占位文件即可，之后由 Actions 自动更新）
+
+### 5. 测试运行
+
+进入公库 **Actions** → 选择 "🔄 Lewa GaGaLe Auto Checkin" → **Run workflow**：
+
+- 手动触发时会出现下拉框 **"🎫 自动兑换月卡"**：`跟随仓库变量`（默认）/ `开启` / `关闭`，可临时覆盖本次运行的行为
+- 检查运行结果：
+  - ✅ 能成功拉取私库 `checkin.py`
+  - ✅ 登录成功、签到成功（或提示"今日已签到"）
+  - ✅ 打印 `💰 查询到真实余额` 与 `🛒 商城商品` 列表
+  - ✅ 按开关状态出现兑换记录，或 `积分不足，跳过月卡兑换` / `自动兑换月卡已关闭`
+  - ✅ 配置了 Telegram 的话能收到推送
+  - ✅ `lewa/time.txt` 被自动提交更新
+
+## 月卡自动兑换说明
+
+签到完成后脚本会自动尝试兑换月卡，流程：
+
+1. 调用积分接口拿到**真实余额**与**商城商品列表**（`store_items`，日志中 `🛒 商城商品` 一行会完整打印，可随时核对真实商品 id 与价格）
+2. 自动挑选月卡商品：名称**精确为"月卡"** 的优先，否则选 30 天固定续期卡（不会误买"半月卡"等其他商品）
+3. 余额 ≥ 商品价格时发起兑换请求（带随机 `request_id`，与服务端幂等校验兼容）；余额不足则打印 `积分不足，跳过月卡兑换`
+4. 兑换结果会追加在 TG 推送的 `🎫 月卡兑换:` 一行；兑换成功后推送中的余额为**兑换后余额**
+
+开关优先级（高 → 低）：
+
+| 优先级 | 控制方式 | 生效范围 |
+|---|---|---|
+| 1 | 手动触发时的下拉框（开启/关闭） | 仅当次运行 |
+| 2 | 公库仓库变量 `AUTO_REDEEM_MONTHLY` | 所有定时任务 |
+| 3 | 默认值（开启） | 兜底 |
+
+进阶：私库脚本顶部的 `MONTHLY_CARD_ITEM_ID` 可手动指定商品 id（如 `item_1792885258138`），**默认留空即自动选品**，无需维护；只有当商城被站长重建、自动选品拿不到预期商品时才需要改。
+
+## 运行机制
+
+- **定时触发**：每天 UTC `00:10` 与 `12:10`（北京时间 8:10 / 20:10）各跑一次，避免漏签
+- **随机延迟**：每次运行随机等待 0~120 秒再执行，降低被目标站点识别为自动化脚本的概率
+- **防休眠**：无论签到成功与否，最后一步都会更新并提交 `lewa/time.txt`，保持公库有持续的 commit 活动，避免 GitHub 因 60 天无活动自动暂停 Actions
+- **代理可选**：配置 `HY2_PROXY_URL` 后，workflow 会自动安装 Hysteria2 客户端，脚本拉起本地 SOCKS5 代理后再发请求；不配置则直连
+- **失败隔离**：月卡兑换失败（余额不足、商品下架、网络异常等）只在 TG 报告中标注 ⚠️，不影响运行结果；只有签到本身失败才会以非零码退出
+
+## 常见问题
+
+**Q: Cookie/账号密码会不会泄露在公库的 Actions 日志里？**
+A: 不会。账号在日志中会做脱敏处理（如 `abc***xyz`），密码类 Secret 本身在 Actions 日志中会被自动打码为 `***`；脚本文件里也不含任何凭据（全部走环境变量）。
+
+**Q: 如何修改签到时间？**
+A: 编辑公库 `.github/workflows/lewa_checkin.yml` 中 `schedule` 下的 `cron` 表达式（UTC 时间）。
+
+**Q: 如何关闭自动兑换月卡？**
+A: 见上方"开关优先级"：临时关一次用手动触发下拉框选"关闭"；长期关闭把公库 Variables 里 `AUTO_REDEEM_MONTHLY` 设为 `0`。
+
+**Q: 兑换提示"商品不存在或已下架"？**
+A: 站长重建商城后商品 id 会变化。脚本默认自动从商城列表选品（每次运行实时获取），一般无需处理；如果你在私库脚本里手动指定过 `MONTHLY_CARD_ITEM_ID`，请清空它或从日志 `🛒 商城商品` 一行里找到新 id 更新。
+
+**Q: Actions 页面报了一个跟 Gradle/Java 相关的错误？**
+A: 与本签到 workflow 无关，是仓库里其他遗留的 workflow 文件报错，可以在 `.github/workflows/` 目录下找到并删除或禁用。
