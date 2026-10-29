@@ -1,0 +1,129 @@
+# ============================================================================
+# 文件: 私有仓库 / .github/workflows/checkin.yml
+# 角色: 【主力·每天跑】定时自动签到 + 每日提交时间戳（防止 60 天无活动被停用）
+# 跑谁: 公开仓库 emby-checkin 里的 emby_checkin.py（checkout 到 code/ 目录）
+# 配置: 本仓库根目录 config.json（用 EMBY_CONFIG 指过去）
+# 触发: cron 每天两次 —— UTC 16:17（北京 00:17）+ UTC 17:42 兜底（北京 01:42）
+# 代理: 可选，Settings → Secrets 加 EMBY_PROXY（如 socks5h://host:port）
+# 推送: 用 github-actions[bot] 提交 keepalive.txt；分支保护挡住时可加 Secret
+#       KEEPALIVE_TOKEN（有 repo 写权限的 PAT），否则用内置 GITHUB_TOKEN
+# 排查: 失败时点开 run → always 步骤会打印完整 checkin.log，另有 artifact 留 7 天
+# ============================================================================
+name: 宸澄checkin
+
+on:
+  schedule:
+    - cron: '17 16 * * *'
+    - cron: '42 17 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只查询状态，不签到'
+        type: boolean
+        default: false
+
+# 需要写权限来提交时间戳；读代码只需要 contents:read，写仅用于 keepalive.txt
+permissions:
+  contents: write
+
+concurrency:
+  group: checkin
+  cancel-in-progress: false
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出私有仓库（配置在这里）
+        uses: actions/checkout@v4
+        with:
+          # 需要完整历史才能 rebase 后推送时间戳提交
+          fetch-depth: 0
+          # 默认用内置 token；被分支保护挡住时改用 Secret KEEPALIVE_TOKEN
+          token: ${{ secrets.KEEPALIVE_TOKEN || github.token }}
+
+      - name: 检出公开仓库（代码在这里）
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/emby-checkin
+          path: code
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 执行签到
+        env:
+          EMBY_CONFIG: ${{ github.workspace }}/config.json
+          EMBY_LOG: ${{ github.workspace }}/checkin.log
+          EMBY_PROXY: ${{ secrets.EMBY_PROXY }}
+          JITTER: '600'
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAG="--dry-run"; else FLAG=""; fi
+          python code/emby_checkin.py $FLAG
+
+      # GitHub 规则：仓库连续 60 天没有任何提交活动，schedule 触发的工作流会被自动停用。
+      # 这里每天把运行时间写进 keepalive.txt 并提交，让仓库始终「活着」。
+      # 用 always() 保证签到失败时也照样提交；手动 dry-run 不提交（不想为了测试刷提交）。
+      - name: 更新时间戳（防 60 天休眠）
+        if: always() && inputs.dry_run != true
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          local_ts="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
+
+          # 一天最多提交一次：两次 cron 靠得太近时，第二次直接跳过，避免刷提交
+          if [ -f keepalive.txt ]; then
+            last="$(git log -1 --format=%ct -- keepalive.txt 2>/dev/null || echo 0)"
+            if [ $(( $(date +%s) - last )) -lt 68400 ]; then
+              echo "上次时间戳提交在 19 小时内，跳过"
+              exit 0
+            fi
+          fi
+
+          {
+            echo "# 自动维护的时间戳，用于避免仓库 60 天无活动被停用定时任务"
+            echo "# 最后运行（UTC）: $ts"
+            echo "# 最后运行（北京）: $local_ts"
+            echo "$ts"
+          } > keepalive.txt
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add keepalive.txt
+
+          if git diff --cached --quiet; then
+            echo "时间戳没有变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "chore(keepalive): $ts"
+
+          for i in 1 2 3; do
+            if git pull --rebase --autostash origin "$BRANCH" && git push origin "HEAD:$BRANCH"; then
+              echo "时间戳已推送（第 $i 次尝试）"
+              exit 0
+            fi
+            echo "第 $i 次推送失败，5 秒后重试"
+            sleep 5
+          done
+          echo "时间戳推送失败：检查分支保护或 KEEPALIVE_TOKEN"
+          exit 1
+
+      - name: 输出日志
+        if: always()
+        run: |
+          echo "=========== checkin.log ==========="
+          cat checkin.log 2>/dev/null || echo "(没有日志)"
+
+      - name: 上传日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkin-log-${{ github.run_id }}
+          path: checkin.log
+          retention-days: 7
+          if-no-files-found: ignore
