@@ -4,7 +4,11 @@
 # 跑谁: 公开仓库 emby-checkin 里的 emby_checkin.py（checkout 到 code/ 目录）
 # 配置: 本仓库根目录 config.json（用 CC_CONFIG 指过去）
 # 触发: cron 每天两次 —— UTC 16:17（北京 00:17）+ UTC 17:42 兜底（北京 01:42）
-# 代理: 可选，Settings → Secrets 加 CC_PROXY（如 socks5h://host:port）
+# 代理: 可选。Settings → Secrets 二选一：
+#       CC_PROXY = 现成代理（socks5h://host:1080、http://host:8080 …）
+#       HY2_URL  = Hysteria2 分享链接（hysteria2://pass@host:443?sni=…&insecure=1），
+#                  工作流会现场装 Hysteria2 并起本地 socks5://127.0.0.1:1080
+#       两者都没有就直连；代理起不来也会自动回落直连，不会阻塞签到。
 # 推送: 用 github-actions[bot] 提交 keepalive.txt；分支保护挡住时可加 Secret
 #       KEEPALIVE_TOKEN（有 repo 写权限的 PAT），否则用内置 GITHUB_TOKEN
 # 排查: 失败时点开 run → always 步骤会打印完整 checkin.log，另有 artifact 留 7 天
@@ -54,13 +58,24 @@ jobs:
         with:
           python-version: '3.11'
 
+      # 代理是可选的：CC_PROXY 直接给现成代理；HY2_URL 则现场拉起 Hysteria2。
+      # 脚本会把结果写进 $GITHUB_ENV 的 CC_PROXY，后面的签到步骤自动继承；
+      # 起不来就什么都不写，签到直连照跑。
+      - name: 准备代理（Hysteria2 / 现成代理，都可选）
+        env:
+          STATIC_PROXY: ${{ secrets.CC_PROXY || secrets.EMBY_PROXY }}
+          HY2_URL: ${{ secrets.HY2_URL }}
+        run: |
+          chmod +x .github/scripts/proxy-up.sh
+          bash .github/scripts/proxy-up.sh
+
       - name: 执行签到
         env:
           CC_CONFIG: ${{ github.workspace }}/config.json
           CC_LOG: ${{ github.workspace }}/checkin.log
-          CC_PROXY: ${{ secrets.CC_PROXY || secrets.EMBY_PROXY }}
           CC_JITTER: '600'
         run: |
+          echo "CC_PROXY=${CC_PROXY:-（直连）}"
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAG="--dry-run"; else FLAG=""; fi
           python code/emby_checkin.py $FLAG
 
