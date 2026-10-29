@@ -1,10 +1,10 @@
 # ============================================================================
-# 文件: 私有仓库 / .github/workflows/checkin.yml
+# 文件: 私有仓库 / .github/workflows/ccwuser.yml
 # 角色: 【主力·每天跑】定时自动签到 + 每日提交时间戳（防止 60 天无活动被停用）
 # 跑谁: 公开仓库 emby-checkin 里的 emby_checkin.py（checkout 到 code/ 目录）
-# 配置: 本仓库根目录 config.json（用 EMBY_CONFIG 指过去）
+# 配置: 本仓库根目录 config.json（用 CC_CONFIG 指过去）
 # 触发: cron 每天两次 —— UTC 16:17（北京 00:17）+ UTC 17:42 兜底（北京 01:42）
-# 代理: 可选，Settings → Secrets 加 EMBY_PROXY（如 socks5h://host:port）
+# 代理: 可选，Settings → Secrets 加 CC_PROXY（如 socks5h://host:port）
 # 推送: 用 github-actions[bot] 提交 keepalive.txt；分支保护挡住时可加 Secret
 #       KEEPALIVE_TOKEN（有 repo 写权限的 PAT），否则用内置 GITHUB_TOKEN
 # 排查: 失败时点开 run → always 步骤会打印完整 checkin.log，另有 artifact 留 7 天
@@ -56,10 +56,10 @@ jobs:
 
       - name: 执行签到
         env:
-          EMBY_CONFIG: ${{ github.workspace }}/config.json
-          EMBY_LOG: ${{ github.workspace }}/checkin.log
-          EMBY_PROXY: ${{ secrets.EMBY_PROXY }}
-          JITTER: '600'
+          CC_CONFIG: ${{ github.workspace }}/config.json
+          CC_LOG: ${{ github.workspace }}/checkin.log
+          CC_PROXY: ${{ secrets.CC_PROXY || secrets.EMBY_PROXY }}
+          CC_JITTER: '600'
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAG="--dry-run"; else FLAG=""; fi
           python code/emby_checkin.py $FLAG
