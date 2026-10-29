@@ -2,7 +2,7 @@
 # 文件: 私有仓库 / .github/workflows/ccwuser.yml
 # 角色: 【主力·每天跑】定时自动签到 + 每日提交时间戳（防止 60 天无活动被停用）
 # 跑谁: 优先用公开仓库 emby-checkin 里的 emby_checkin.py（checkout 到 code/）
-#       公开仓拉不到时，自动退化用本仓库根目录的 emby_checkin.py
+#       公开仓拉不到时，自动退化用本仓库里的 emby_checkin.py（根目录或任意子目录）
 # 配置: 本仓库根目录 config.json（CC_CONFIG 指过去）；也可用 Secrets CC_* 覆盖
 # 触发: cron 每天两次 —— UTC 16:17（北京 00:17）+ UTC 17:42 兜底（北京 01:42）
 # 代理: 可选。Settings → Secrets 二选一：
@@ -107,19 +107,28 @@ jobs:
       - name: 定位代码目录（公开仓 → 本仓兜底）
         run: |
           set -uo pipefail
+          script=""
           if [ -f code/emby_checkin.py ]; then
-            dir="code"
+            script="code/emby_checkin.py"
             echo "::notice::使用公开仓代码: $PUBLIC_REPO"
-          elif [ -f emby_checkin.py ]; then
-            dir="."
-            echo "::warning::公开仓不可用，退化使用本仓库根目录的 emby_checkin.py"
           else
-            echo "::error::两个位置都没有 emby_checkin.py —— 公开仓 $PUBLIC_REPO 拉取失败，本仓库也没有脚本"
-            echo "处理：1) 推送公开仓并设为 Public；2) 或配 Secret PUBLIC_REPO_TOKEN；3) 或把 emby_checkin.py 放进本仓库根目录"
+            # 本仓任意层级找脚本（最多 4 层），脚本放根目录或子目录都能跑
+            found="$(find . -maxdepth 4 -type f -name 'emby_checkin.py' \
+                     -not -path './code/*' -not -path './.git/*' | head -n 1)"
+            if [ -n "$found" ]; then
+              script="${found#./}"
+              echo "::warning::公开仓不可用，改用本仓库内的 ${script}"
+            fi
+          fi
+          if [ -z "$script" ]; then
+            echo "::error::公开仓 $PUBLIC_REPO 拉取失败，且本仓库里找不到 emby_checkin.py"
+            echo "本仓库现有的 *checkin*.py（最多 5 个）："
+            find . -maxdepth 4 -type f -name '*checkin*.py' -not -path './.git/*' | head -n 5 || true
+            echo "处理：1) 把 emby_checkin.py 复制进本仓库根目录并 push；2) 或推送公开仓并设为 Public；3) 或配 Secret PUBLIC_REPO_TOKEN"
             exit 1
           fi
-          echo "CODE_DIR=$dir" >> "$GITHUB_ENV"
-          echo "- 代码目录: \`$dir\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "CODE_FILE=$script" >> "$GITHUB_ENV"
+          echo "- 代码文件: \`$script\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -152,7 +161,7 @@ jobs:
           CC_JITTER: '600'
         run: |
           set -uo pipefail
-          echo "代码目录: ${CODE_DIR:-?}"
+          echo "代码文件: ${CODE_FILE:-code/emby_checkin.py}"
           echo "CC_PROXY=${CC_PROXY:-（直连）}"
           if [ -f config.json ]; then
             echo "配置文件: config.json（$(wc -c < config.json) 字节）"
@@ -160,7 +169,7 @@ jobs:
             echo "::warning::本仓库没有 config.json，只能依赖 Secrets 里的账号"
           fi
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAG="--dry-run"; else FLAG=""; fi
-          python "${CODE_DIR:-code}/emby_checkin.py" $FLAG
+          python "${CODE_FILE:-code/emby_checkin.py}" $FLAG
 
       # GitHub 规则：仓库连续 60 天没有任何提交活动，schedule 触发的工作流会被自动停用。
       # 这里每天把运行时间写进 keepalive.txt 并提交，让仓库始终「活着」。
