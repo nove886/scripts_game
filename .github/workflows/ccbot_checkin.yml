@@ -89,6 +89,11 @@ jobs:
             echo "⚠️ 未找到 requirements.txt（requests/pysocks 已装，可忽略）"
           fi
 
+      - name: 🧪 语法自检
+        run: |
+          python -m py_compile "${{ steps.locate.outputs.script }}"
+          echo "✅ 语法检查通过"
+
       - name: 📡 安装 Hysteria2（配置了代理才装）
         run: |
           if [ -n "${HY2_PROXY_URL}" ]; then
