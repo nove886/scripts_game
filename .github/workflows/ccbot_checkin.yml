@@ -1,0 +1,126 @@
+name: 🔄 宸澄Emby Auto Checkin
+
+on:
+  workflow_dispatch:
+    inputs:
+      discover:
+        description: "🔎 只探测接口（不签到，用于排查）"
+        type: boolean
+        default: false
+
+  schedule:
+    # 北京时间 08:10 / 20:10，各跑一次避免漏签
+    - cron: "10 0 * * *"
+    - cron: "10 12 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ccbot-checkin
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_DIR: ccbot
+      SCRIPT_NAME: checkin.py
+      SCRIPT_DESC: 宸澄Emby 签到脚本
+      # ⚠️ 改成你自己的私库（存放 checkin.py 的那个私有仓库）
+      PRIVATE_REPO: your-name/ccbot_checkin
+
+    steps:
+      - name: 📥 检出公开仓库
+        uses: actions/checkout@v4
+
+      - name: 📁 创建输出目录
+        run: mkdir -p ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+        working-directory: .
+
+      - name: 🔐 检出私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: main
+          path: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+          fetch-depth: 1
+
+      - name: 🐍 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📚 安装依赖
+        run: |
+          pip install requests pysocks
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "⚠️ 未找到 requirements.txt，跳过"
+          fi
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      - name: 📡 安装 Hysteria2（配置了代理才装）
+        run: |
+          if [ -n "${{ secrets.HY2_PROXY_URL }}" ]; then
+            curl -L -o hysteria \
+              https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
+            chmod +x hysteria
+            sudo mv hysteria /usr/local/bin/hysteria
+            hysteria version
+            echo "✅ Hysteria2 安装完成"
+          else
+            echo "⚠️ 未配置 HY2_PROXY_URL，直连运行"
+          fi
+
+      - name: ⏳ 随机延迟
+        run: |
+          delay=$((RANDOM % 120))
+          echo "随机延迟: ${delay}秒"
+          sleep $delay
+
+      - name: 🔎 接口探测（仅手动触发时）
+        if: ${{ inputs.discover }}
+        env:
+          CCBOT_USERNAME: ${{ secrets.CCBOT_USERNAME }}
+          CCBOT_PASSWORD: ${{ secrets.CCBOT_PASSWORD }}
+          CCBOT_COOKIE: ${{ secrets.CCBOT_COOKIE }}
+          HY2_PROXY_URL: ${{ secrets.HY2_PROXY_URL }}
+          SOCKS_PORT: ${{ secrets.SOCKS_PORT || '51080' }}
+        run: python ${{ env.SCRIPT_NAME }} --discover
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      - name: 🚀 执行签到
+        if: ${{ !inputs.discover }}
+        env:
+          CCBOT_USERNAME: ${{ secrets.CCBOT_USERNAME }}
+          CCBOT_PASSWORD: ${{ secrets.CCBOT_PASSWORD }}
+          CCBOT_COOKIE: ${{ secrets.CCBOT_COOKIE }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          HY2_PROXY_URL: ${{ secrets.HY2_PROXY_URL }}
+          SOCKS_PORT: ${{ secrets.SOCKS_PORT || '51080' }}
+          # 探测不准时可在这里写死接口（Repository Variables 里配置即可，无需改代码）
+          CHECKIN_ENDPOINT: ${{ vars.CHECKIN_ENDPOINT }}
+          CHECKIN_METHOD: ${{ vars.CHECKIN_METHOD || 'POST' }}
+        run: python ${{ env.SCRIPT_NAME }}
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      - name: ⏱️ 提交时间文件（防 Actions 休眠）
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p ccbot && echo "$(date +'%Y-%m-%d %H:%M:%S')" > ccbot/time.txt
+          git add ccbot/time.txt 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "无变化，无需提交"
+          else
+            git commit -m "⏱️ 更新 ccbot 时间文件: $(date +'%Y-%m-%d %H:%M:%S')"
+            git fetch origin main
+            git push -f origin HEAD:main
+            echo "✅ 已推送"
+          fi
