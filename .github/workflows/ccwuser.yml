@@ -1,14 +1,18 @@
 # ============================================================================
 # 文件: 私有仓库 / .github/workflows/ccwuser.yml
 # 角色: 【主力·每天跑】定时自动签到 + 每日提交时间戳（防止 60 天无活动被停用）
-# 跑谁: 公开仓库 emby-checkin 里的 emby_checkin.py（checkout 到 code/ 目录）
-# 配置: 本仓库根目录 config.json（用 CC_CONFIG 指过去）
+# 跑谁: 优先用公开仓库 emby-checkin 里的 emby_checkin.py（checkout 到 code/）
+#       公开仓拉不到时，自动退化用本仓库根目录的 emby_checkin.py
+# 配置: 本仓库根目录 config.json（CC_CONFIG 指过去）；也可用 Secrets CC_* 覆盖
 # 触发: cron 每天两次 —— UTC 16:17（北京 00:17）+ UTC 17:42 兜底（北京 01:42）
 # 代理: 可选。Settings → Secrets 二选一：
 #       CC_PROXY = 现成代理（socks5h://host:1080、http://host:8080 …）
 #       HY2_URL  = Hysteria2 分享链接（hysteria2://pass@host:443?sni=…&insecure=1），
 #                  工作流会现场装 Hysteria2 并起本地 socks5://127.0.0.1:1080
 #       两者都没有就直连；代理起不来也会自动回落直连，不会阻塞签到。
+# 仓库: 公开仓默认 nove886/emby-checkin（可用 Secret PUBLIC_REPO 或手动触发时的
+#       public_repo 输入改掉）。若它是私有的，请配 Secret PUBLIC_REPO_TOKEN
+#       （fine-grained PAT，Contents: Read）——内置 GITHUB_TOKEN 读不到别的私有仓。
 # 推送: 用 github-actions[bot] 提交 keepalive.txt；分支保护挡住时可加 Secret
 #       KEEPALIVE_TOKEN（有 repo 写权限的 PAT），否则用内置 GITHUB_TOKEN
 # 排查: 失败时点开 run → always 步骤会打印完整 checkin.log，另有 artifact 留 7 天
@@ -25,6 +29,11 @@ on:
         description: '只查询状态，不签到'
         type: boolean
         default: false
+      public_repo:
+        description: '公开仓（owner/name），留空用 nove886/emby-checkin'
+        type: string
+        required: false
+        default: ''
 
 # 需要写权限来提交时间戳；读代码只需要 contents:read，写仅用于 keepalive.txt
 permissions:
@@ -34,12 +43,16 @@ concurrency:
   group: checkin
   cancel-in-progress: false
 
+env:
+  # 公开仓位置：手动触发时可用 public_repo 临时覆盖，否则用 Secret，最后兜底默认值
+  PUBLIC_REPO: ${{ inputs.public_repo || secrets.PUBLIC_REPO || 'nove886/emby-checkin' }}
+
 jobs:
   checkin:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: 检出私有仓库（配置在这里）
+      - name: 检出本仓库（配置在这里）
         uses: actions/checkout@v4
         with:
           # 需要完整历史才能 rebase 后推送时间戳提交
@@ -47,11 +60,66 @@ jobs:
           # 默认用内置 token；被分支保护挡住时改用 Secret KEEPALIVE_TOKEN
           token: ${{ secrets.KEEPALIVE_TOKEN || github.token }}
 
-      - name: 检出公开仓库（代码在这里）
+      # 先探一下公开仓能不能看见，把 404 的原因说清楚，免得只看到 checkout 的红叉
+      - name: 预检公开仓库
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN || github.token }}
+        run: |
+          set -uo pipefail
+          echo "公开仓: $PUBLIC_REPO"
+          code="$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$PUBLIC_REPO" || echo 000)"
+          case "$code" in
+            200) echo "::notice::公开仓可访问（$PUBLIC_REPO）" ;;
+            404)
+              echo "::warning::$PUBLIC_REPO 不存在或当前 token 无权访问（404）"
+              echo "- 若已推送：确认 Visibility = Public"
+              echo "- 若是私有仓：配 Secret PUBLIC_REPO_TOKEN（Contents: Read）"
+              echo "- 名字/所有者不同：改用 Secret PUBLIC_REPO 指定真实地址" ;;
+            401)
+              echo "::warning::token 无效（401），将退回匿名访问" ;;
+            *)
+              echo "::warning::探测返回 HTTP $code，继续尝试 checkout" ;;
+          esac
+          {
+            echo "### 环境自检"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 公开仓 | \`$PUBLIC_REPO\` |"
+            echo "| API 探测 | \`$code\` |"
+            echo "| 运行仓库 | \`${{ github.repository }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 检出公开仓库（代码在这里，失败不中断）
+        id: pub
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/emby-checkin
+          # 直接写表达式（env 上下文在 with: 里不可靠），优先级：手动输入 > Secret > 默认值
+          repository: ${{ inputs.public_repo || secrets.PUBLIC_REPO || 'nove886/emby-checkin' }}
           path: code
+          fetch-depth: 1
+          token: ${{ secrets.PUBLIC_REPO_TOKEN || github.token }}
+
+      - name: 定位代码目录（公开仓 → 本仓兜底）
+        run: |
+          set -uo pipefail
+          if [ -f code/emby_checkin.py ]; then
+            dir="code"
+            echo "::notice::使用公开仓代码: $PUBLIC_REPO"
+          elif [ -f emby_checkin.py ]; then
+            dir="."
+            echo "::warning::公开仓不可用，退化使用本仓库根目录的 emby_checkin.py"
+          else
+            echo "::error::两个位置都没有 emby_checkin.py —— 公开仓 $PUBLIC_REPO 拉取失败，本仓库也没有脚本"
+            echo "处理：1) 推送公开仓并设为 Public；2) 或配 Secret PUBLIC_REPO_TOKEN；3) 或把 emby_checkin.py 放进本仓库根目录"
+            exit 1
+          fi
+          echo "CODE_DIR=$dir" >> "$GITHUB_ENV"
+          echo "- 代码目录: \`$dir\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -60,12 +128,16 @@ jobs:
 
       # 代理是可选的：CC_PROXY 直接给现成代理；HY2_URL 则现场拉起 Hysteria2。
       # 脚本会把结果写进 $GITHUB_ENV 的 CC_PROXY，后面的签到步骤自动继承；
-      # 起不来就什么都不写，签到直连照跑。
+      # 起不来就什么都不写，签到直连照跑。脚本或代理缺席都不会让 job 失败。
       - name: 准备代理（Hysteria2 / 现成代理，都可选）
         env:
           STATIC_PROXY: ${{ secrets.CC_PROXY || secrets.EMBY_PROXY }}
           HY2_URL: ${{ secrets.HY2_URL }}
         run: |
+          if [ ! -f .github/scripts/proxy-up.sh ]; then
+            echo "::notice::没有 .github/scripts/proxy-up.sh，跳过代理准备"
+            exit 0
+          fi
           chmod +x .github/scripts/proxy-up.sh
           bash .github/scripts/proxy-up.sh
 
@@ -73,11 +145,22 @@ jobs:
         env:
           CC_CONFIG: ${{ github.workspace }}/config.json
           CC_LOG: ${{ github.workspace }}/checkin.log
+          # Secrets 里配了就用 Secrets 覆盖（空值不会盖掉 config.json）
+          CC_USERNAME: ${{ secrets.CC_USERNAME || secrets.EMBY_USERNAME }}
+          CC_PASSWORD: ${{ secrets.CC_PASSWORD || secrets.EMBY_PASSWORD }}
+          CC_COOKIE: ${{ secrets.CC_COOKIE || secrets.EMBY_COOKIE }}
           CC_JITTER: '600'
         run: |
+          set -uo pipefail
+          echo "代码目录: ${CODE_DIR:-?}"
           echo "CC_PROXY=${CC_PROXY:-（直连）}"
+          if [ -f config.json ]; then
+            echo "配置文件: config.json（$(wc -c < config.json) 字节）"
+          else
+            echo "::warning::本仓库没有 config.json，只能依赖 Secrets 里的账号"
+          fi
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAG="--dry-run"; else FLAG=""; fi
-          python code/emby_checkin.py $FLAG
+          python "${CODE_DIR:-code}/emby_checkin.py" $FLAG
 
       # GitHub 规则：仓库连续 60 天没有任何提交活动，schedule 触发的工作流会被自动停用。
       # 这里每天把运行时间写进 keepalive.txt 并提交，让仓库始终「活着」。
