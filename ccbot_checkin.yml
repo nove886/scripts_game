@@ -1,0 +1,129 @@
+name: 🔄 宸澄Emby Auto Checkin
+
+# 单仓库模式：checkin.py 直接放在本仓库里，不需要私有仓库 / PAT。
+# 想用双仓库模式：把 Repository Variable `PRIVATE_REPO` 设成 用户名/私库名，
+# 并配好 Secret `PRIVATE_REPO_TOKEN`，工作流会自动优先用私库里的脚本。
+
+on:
+  workflow_dispatch:
+    inputs:
+      discover:
+        description: "🔎 只探测接口（不签到，排查用）"
+        type: boolean
+        default: false
+
+  schedule:
+    # 北京时间 08:10 / 20:10
+    - cron: "10 0 * * *"
+    - cron: "10 12 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ccbot-checkin
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CCBOT_USERNAME: ${{ secrets.CCBOT_USERNAME }}
+      CCBOT_PASSWORD: ${{ secrets.CCBOT_PASSWORD }}
+      CCBOT_COOKIE: ${{ secrets.CCBOT_COOKIE }}
+      CCBOT_BASE_URL: ${{ vars.CCBOT_BASE_URL || 'https://ccbot.wybcs.work' }}
+      CHECKIN_ENDPOINT: ${{ vars.CHECKIN_ENDPOINT }}
+      CHECKIN_METHOD: ${{ vars.CHECKIN_METHOD || 'POST' }}
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      HY2_PROXY_URL: ${{ secrets.HY2_PROXY_URL }}
+      SOCKS_PORT: ${{ secrets.SOCKS_PORT || '51080' }}
+
+    steps:
+      - name: 📥 检出仓库
+        uses: actions/checkout@v4
+
+      # 配了变量 CCBOT_PRIVATE_REPO（格式 用户名/私库名）才检出私库；失败不中断，自动回落仓库内脚本
+      - name: 🔐 检出私有仓库（可选，双仓库模式）
+        if: ${{ vars.CCBOT_PRIVATE_REPO != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.CCBOT_PRIVATE_REPO }}
+          token: ${{ secrets.CCBOT_PRIVATE_REPO_TOKEN || secrets.PRIVATE_REPO_TOKEN }}
+          path: _private
+          fetch-depth: 1
+
+      - name: 🧭 定位脚本
+        id: locate
+        run: |
+          for p in "ccbot/checkin.py" "ccbot_checkin/私库/checkin.py" "_private/checkin.py" "_private/私库/checkin.py"; do
+            if [ -f "$p" ]; then
+              echo "script=$p" >> "$GITHUB_OUTPUT"
+              echo "✅ 使用脚本：$p"
+              exit 0
+            fi
+          done
+          echo "❌ 仓库里找不到 checkin.py"
+          echo "请把 私库/checkin.py 放到 ccbot/checkin.py（推荐）或 ccbot_checkin/私库/checkin.py"
+          ls -R . | head -50
+          exit 1
+
+      - name: 🐍 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📚 安装依赖
+        run: |
+          pip install requests pysocks
+          REQ="$(dirname "${{ steps.locate.outputs.script }}")/requirements.txt"
+          if [ -f "$REQ" ]; then
+            echo "安装 $REQ"
+            pip install -r "$REQ"
+          else
+            echo "⚠️ 未找到 requirements.txt（requests/pysocks 已装，可忽略）"
+          fi
+
+      - name: 📡 安装 Hysteria2（配置了代理才装）
+        run: |
+          if [ -n "${HY2_PROXY_URL}" ]; then
+            curl -L --retry 3 --retry-delay 2 -o hysteria \
+              https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
+            chmod +x hysteria
+            sudo mv hysteria /usr/local/bin/hysteria
+            hysteria version
+            echo "✅ Hysteria2 安装完成"
+          else
+            echo "⚠️ 未配置 HY2_PROXY_URL，直连运行"
+          fi
+
+      - name: ⏳ 随机延迟
+        run: |
+          delay=$((RANDOM % 120))
+          echo "随机延迟 ${delay} 秒"
+          sleep $delay
+
+      - name: 🔎 接口探测（仅手动勾选时）
+        if: ${{ inputs.discover }}
+        run: python "${{ steps.locate.outputs.script }}" --discover
+
+      - name: 🚀 执行签到
+        if: ${{ !inputs.discover }}
+        run: python "${{ steps.locate.outputs.script }}"
+
+      - name: ⏱️ 提交时间文件（防 Actions 休眠）
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p ccbot
+          echo "$(date +'%Y-%m-%d %H:%M:%S')" > ccbot/time.txt
+          git add ccbot/time.txt 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "无变化，跳过提交"
+          else
+            git commit -m "chore(ccbot): keep-alive $(date +%F)"
+            git push || { echo "⚠️ 推送失败（可能有并发工作流），忽略"; }
+          fi
