@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: ccbot-checkin
@@ -120,6 +121,33 @@ jobs:
       - name: 🚀 执行签到
         if: ${{ !inputs.discover }}
         run: python "${{ steps.locate.outputs.script }}"
+
+      - name: 🧹 清理本工作流的其他运行
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 从 GITHUB_WORKFLOW_REF 推导文件名，改文件名也不用动这里
+          WF_FILE="$(basename "${GITHUB_WORKFLOW_REF%%@*}")"
+          echo "🧹 目标工作流：$WF_FILE（当前 run ${{ github.run_id }}）"
+
+          # 1) 取消排队中的重复运行（手动连点、cron 撞车都会留下这种）
+          for id in $(gh run list --workflow "$WF_FILE" --status queued --limit 50 \
+                        --json databaseId --jq '.[].databaseId'); do
+            [ "$id" = "${{ github.run_id }}" ] && continue
+            echo "  ⏹ 取消 queued 运行 $id"
+            gh run cancel "$id" || true
+          done
+
+          # 2) 已完成的历史只保留最近 10 条，其余删除
+          for id in $(gh run list --workflow "$WF_FILE" --status completed --limit 100 \
+                        --json databaseId --jq '.[].databaseId' | tail -n +11); do
+            echo "  🗑 删除旧运行 $id"
+            gh run delete "$id" || true
+          done
+
+          echo "✅ 清理完成"
 
       - name: ⏱️ 提交时间文件（防 Actions 休眠）
         if: always()
