@@ -1,0 +1,125 @@
+name: 🔄 Lewa_2 GaGaLe Auto Checkin
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_redeem:
+        description: "🎫 自动兑换月卡（定时任务跟随仓库变量 AUTO_REDEEM_MONTHLY）"
+        type: choice
+        default: "跟随仓库变量"
+        options:
+          - "跟随仓库变量"
+          - "开启"
+          - "关闭"
+
+  schedule:
+    # 2次签到，确保不漏签
+    - cron: "40 0 * * *"
+    - cron: "40 12 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lewa_2-checkin
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_DIR: lewa_2
+      SCRIPT_NAME: checkin.py
+      SCRIPT_DESC: Lewa_2 GaGaLe 签到脚本
+
+    steps:
+      # 步骤 1: 检出公开仓库（当前仓库 scripts_game）
+      - name: 📥 检出公开仓库
+        uses: actions/checkout@v4
+
+      # 步骤 1.5: 创建带命名空间的私库检出目录，避免和其他项目冲突
+      - name: 📁 创建输出目录
+        run: mkdir -p ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+        working-directory: .
+
+      # 步骤 2: 检出私有仓库（存放实际签到脚本）
+      - name: 🔐 检出私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: nove886/lewa_gagale_checkin
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: main
+          path: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+          fetch-depth: 1
+
+      # 步骤 3: 设置 Python 环境
+      - name: 🐍 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 步骤 4: 安装依赖
+      - name: 📚 安装 Python 依赖
+        run: |
+          pip install requests pysocks
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "⚠️ 未找到 requirements.txt，跳过依赖安装"
+          fi
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      # 步骤 4.5: 安装 Hysteria2（如果配置了代理）
+      - name: 📡 安装 Hysteria2
+        run: |
+          if [ -n "${{ secrets.HY2_PROXY_URL }}" ]; then
+            echo "安装 Hysteria2..."
+            curl -L -o hysteria \
+              https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
+            chmod +x hysteria
+            sudo mv hysteria /usr/local/bin/hysteria
+            hysteria version
+            echo "✅ Hysteria2 安装完成"
+          else
+            echo "⚠️ 未配置代理，跳过 Hysteria2 安装"
+          fi
+
+      # 步骤 5: 随机延迟，避免固定时间点被风控识别
+      - name: ⏳ 添加随机延迟
+        run: |
+          delay=$((RANDOM % 120))
+          echo "随机延迟: ${delay}秒"
+          sleep $delay
+
+      # 步骤 6: 执行签到脚本
+      - name: 🚀 执行 ${{ env.SCRIPT_DESC }}
+        env:
+          EMBY_USERNAME: ${{ secrets.EMBY_USERNAME_2 }}
+          EMBY_PASSWORD: ${{ secrets.EMBY_PASSWORD_2 }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          HY2_PROXY_URL: ${{ secrets.HY2_PROXY_URL }}
+          SOCKS_PORT: ${{ secrets.SOCKS_PORT || '51080' }}
+          # 🎫 自动兑换月卡开关：手动触发按下拉框选择；定时任务跟随仓库变量 AUTO_REDEEM_MONTHLY（默认开启）
+          AUTO_REDEEM_MONTHLY: ${{ inputs.auto_redeem == '开启' && '1' || inputs.auto_redeem == '关闭' && '0' || vars.AUTO_REDEEM_MONTHLY || '1' }}
+        run: python ${{ env.SCRIPT_NAME }}
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      # 步骤 7: 提交时间文件到公开库（无论签到是否成功都执行，用于防止 Actions 休眠）
+      - name: ⏱️ 提交时间文件
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p lewa_2 && echo "$(date +'%Y-%m-%d %H:%M:%S')" > lewa_2/time.txt
+          git add lewa_2/time.txt 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "无变化，无需提交"
+          else
+            TIMESTAMP=$(date +'%Y-%m-%d %H:%M:%S')
+            git commit -m "⏱️ 更新 lewa_2 时间文件: $TIMESTAMP"
+            git fetch origin main
+            git push -f origin HEAD:main
+            echo "✅ 更改已推送"
+          fi
