@@ -1,0 +1,139 @@
+name: 🍿 Lewa GaGaLe Auto Checkin
+
+on:
+  schedule:
+    # 2次签到，确保不漏签
+    - cron: "10 0 * * *"
+    - cron: "10 12 * * *"
+  workflow_dispatch:
+    inputs:
+      auto_redeem:
+        description: "🎫 自动兑换月卡（定时任务跟随仓库变量 AUTO_REDEEM_MONTHLY）"
+        type: choice
+        default: "跟随仓库变量"
+        options:
+          - "跟随仓库变量"
+          - "开启"
+          - "关闭"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: flixpilot-checkin
+      cancel-in-progress: false
+    env:
+      SCRIPT_NAME: checkin.py
+      SCRIPT_DESC: Lewa GaGaLe 签到脚本
+      LEVA_USERNAME: ${{ secrets.LEVA_USERNAME }}
+      LEVA_PASSWORD: ${{ secrets.LEVA_PASSWORD }}
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      # 支持协议: vless, vmess, trojan, ss, hy2, tuic, anytls, socks5
+      PROXY_CONTENT: ${{ secrets.HY2_PROXY_URL }}
+      SOCKS_PORT: ${{ secrets.SOCKS_PORT || '50808' }}
+      PROJECT_DIR: leva
+      PRIVATE_REPO: doraemon6789/auto_leva_private
+
+    steps:
+      - name: 检出公开仓库
+        uses: actions/checkout@v4
+
+      - name: 创建输出目录
+        run: mkdir -p ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      - name: 检出私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: main
+          path: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+          fetch-depth: 1
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install requests pysocks
+          fi
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+
+      - name: 安装代理
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+        run: |
+          if [ -z "$PROXY_CONTENT" ]; then
+            echo "[INFO] 未配置代理，直连模式"
+            exit 0
+          fi
+
+          SB_VER="1.13.14"
+          ARCHIVE="sing-box-${SB_VER}-linux-amd64.tar.gz"
+          wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SB_VER}/${ARCHIVE}"
+          tar -xzf "$ARCHIVE" -C /tmp/
+          mv "/tmp/sing-box-${SB_VER}-linux-amd64/sing-box" ./sing-box
+          chmod +x ./sing-box
+          rm -rf "/tmp/sing-box-${SB_VER}-linux-amd64" "$ARCHIVE"
+          echo "[INFO] sing-box $(./sing-box version | head -1)"
+
+      - name: 随机延迟
+        run: |
+          delay=$((RANDOM % 120))
+          echo "随机延迟: ${delay}秒"
+          sleep $delay
+
+      - name: 执行 ${{ env.SCRIPT_DESC }}
+        working-directory: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ env.PROJECT_DIR }}
+        env:
+          LEVA_USERNAME: ${{ env.LEVA_USERNAME }}
+          LEVA_PASSWORD: ${{ env.LEVA_PASSWORD }}
+          TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ env.TG_CHAT_ID }}
+          PROXY_CONTENT: ${{ env.PROXY_CONTENT }}
+          SOCKS_PORT: ${{ env.SOCKS_PORT }}
+          # 🎫 自动兑换月卡开关：手动触发按下拉框选择；定时任务跟随仓库变量 AUTO_REDEEM_MONTHLY（默认开启）
+          AUTO_REDEEM_MONTHLY: ${{ inputs.auto_redeem == '开启' && '1' || inputs.auto_redeem == '关闭' && '0' || vars.AUTO_REDEEM_MONTHLY || '1' }}
+        run: python ${{ env.SCRIPT_NAME }}
+
+      - name: 提交执行时间
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p ${{ env.PROJECT_DIR }} && echo "$(date +'%Y-%m-%d %H:%M:%S')" > ${{ env.PROJECT_DIR }}/time.txt
+          git add ${{ env.PROJECT_DIR }}/time.txt 2>/dev/null || true
+          # 并发安全提交：每次以最新远端为基准重建提交，重试 3 次；
+          # 最终失败只告警不让 run 变红（time.txt 仅为保活元数据）
+          for _try in 1 2 3; do
+            git fetch origin main
+            git reset --soft FETCH_HEAD
+            git commit -m "更新时间文件: $(date +'%Y-%m-%d %H:%M:%S')"
+            if git push origin HEAD:main; then
+              echo "执行时间已提交"
+              exit 0
+            fi
+            echo "第 $_try 次推送冲突，重取远端后重试"
+            sleep 3
+          done
+          echo "::warning::time.txt 3 次推送均失败，本次未更新（不影响本次执行结果）"
+
+      - name: 清理旧运行
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 7
+          keep_minimum_runs: 5
